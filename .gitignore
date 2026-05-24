@@ -55,3 +55,22 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+# All bin and obj folders anywhere
+**/bin/
+**/obj/
+
+# All nupkg files anywhere
+**/*.nupkg
+**/*.snupkg
+
+# Test results everywhere
+**/TestResults/
+**/coverage.cobertura.xml
+
+# All .user files
+*.user
+**/*.user
+
+# Build outputs in src folders
+src/**/bin/
+src/**/obj/
