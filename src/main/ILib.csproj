@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>DryFish.ILib</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Dry Fish</Authors>
+    <Description>A simple utility library for console operations</Description>
+  </PropertyGroup>
+</Project>
