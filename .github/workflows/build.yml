@@ -1,4 +1,4 @@
-name: Build and Test DryFish.ILib
+name: Build, Test, and Publish DryFish.ILib
 
 on:
   push:
@@ -6,95 +6,203 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch: # Cho phép chạy manual
+  workflow_dispatch:  # Cho phép chạy manual
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  PROJECT_PATH: 'src/main/DryFish.ILib.csproj'
+  TEST_PROJECT_PATH: 'src/test/DryFish.ILib.Test.csproj'
 
 jobs:
-  build:
+  build-and-test:
+    name: Build and Test
     runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.PROJECT_PATH }}
+    
+    - name: Build
+      run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+    
+    - name: Run tests with coverage
+      run: |
+        dotnet test ${{ env.TEST_PROJECT_PATH }} \
+          --configuration Release \
+          --no-build \
+          --verbosity normal \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./TestResults \
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+    
+    - name: Find and copy coverage report
+      run: |
+        # Tìm file coverage
+        COVERAGE_FILE=$(find ./TestResults -name "coverage.cobertura.xml" | head -1)
+        if [ -f "$COVERAGE_FILE" ]; then
+          mkdir -p coverage
+          cp "$COVERAGE_FILE" ./coverage/coverage.cobertura.xml
+          echo "Coverage file found and copied"
+        else
+          echo "No coverage file found"
+        fi
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage/coverage.cobertura.xml
+        flags: unittests
+        name: dryfish-ilib
+        fail_ci_if_error: false
+        verbose: true
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          ./TestResults/**/*.xml
+          ./coverage/**/*.xml
+        retention-days: 30
+    
+    - name: Pack NuGet package
+      run: dotnet pack ${{ env.PROJECT_PATH }} --configuration Release --no-build --output ./artifacts
+    
+    - name: Upload NuGet artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages
+        path: |
+          ./artifacts/*.nupkg
+          ./artifacts/*.snupkg
+        retention-days: 7
+
+  publish-to-nuget:
+    name: Publish to NuGet
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+    
+    - name: Pack with version
+      run: |
+        dotnet pack ${{ env.PROJECT_PATH }} \
+          --configuration Release \
+          -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
+          --output ./artifacts
+    
+    - name: Publish to NuGet.org
+      run: |
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./artifacts/*.nupkg
+        generate_release_notes: true
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  matrix-test:
+    name: Test on multiple platforms
+    runs-on: ${{ matrix.os }}
+    needs: build-and-test
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     
     strategy:
       matrix:
-        dotnet: ['6.0.x', '7.0.x', '8.0.x']
         os: [ubuntu-latest, windows-latest, macos-latest]
+        dotnet: ['6.0.x', '7.0.x', '8.0.x']
         exclude:
           - os: macos-latest
-            dotnet: '6.0.x' # Không test .NET 6 trên macOS
+            dotnet: '6.0.x'
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ matrix.dotnet }}
     
-    - name: Restore dependencies
-      run: dotnet restore DryFish.ILib.sln
-    
-    - name: Build
-      run: dotnet build DryFish.ILib.sln --configuration Release --no-restore --verbosity minimal
-    
-    - name: Test
-      run: dotnet test src/test/DryFish.ILib.Test.csproj --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage"
-    
-    - name: Pack NuGet
-      run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release --no-build --output ./nupkg
-    
-    - name: Upload NuGet package
-      uses: actions/upload-artifact@v4
-      with:
-        name: nuget-package-${{ matrix.dotnet }}-${{ matrix.os }}
-        path: ./nupkg/*.nupkg
-    
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        files: ./**/coverage.cobertura.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
-    
-    - name: Get version from tag
-      id: get_version
-      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
-    
-    - name: Pack NuGet with version
-      run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} --output ./nupkg
-    
-    - name: Publish to NuGet
-      run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-    
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: ./nupkg/*.nupkg
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  test-compatibility:
-    runs-on: ubuntu-latest
-    needs: build
-    if: always()
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Test on .NET Framework (Windows only)
+    - name: Restore and build
       run: |
-        echo "Testing on different frameworks"
-        dotnet test src/test/DryFish.ILib.Tests.csproj --framework net48 2>/dev/null || echo "net48 not supported"
+        dotnet restore ${{ env.PROJECT_PATH }}
+        dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+    
+    - name: Run tests
+      run: dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-dotnet-${{ matrix.dotnet }}
+        path: ./TestResults/**/*.xml
+        retention-days: 7
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run security scan
+      uses: dotnet/samples/security/actions/dotnet-security-scan@main
+      with:
+        project: ${{ env.PROJECT_PATH }}
+    
+    - name: Upload security results
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Dependency Review
+      uses: actions/dependency-review-action@v4
+      with:
+        fail-on-severity: high
