@@ -1,4 +1,4 @@
-Tests: Build and Test DryFish.ILib
+name: Build and Test DryFish.ILib
 
 on:
   push:
@@ -35,7 +35,7 @@ jobs:
       run: dotnet build DryFish.ILib.sln --configuration Release --no-restore --verbosity minimal
     
     - name: Test
-      run: dotnet test src/test/DryFish.ILib.Tests.csproj --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage"
+      run: dotnet test src/test/DryFish.ILib.Test.csproj --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage"
     
     - name: Pack NuGet
       run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release --no-build --output ./nupkg
