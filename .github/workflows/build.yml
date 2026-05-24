@@ -1,4 +1,4 @@
-name: Build and Test DryFish.ILib
+Tests: Build and Test DryFish.ILib
 
 on:
   push:
