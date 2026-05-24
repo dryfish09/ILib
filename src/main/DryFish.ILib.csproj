@@ -1,37 +1,47 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     
-    <!-- Package info -->
+    <!-- Thông tin package -->
     <PackageId>DryFish.ILib</PackageId>
     <Version>1.0.0</Version>
     <Authors>DryFish</Authors>
     <Company>DryFish</Company>
     <Product>DryFish ILib</Product>
-    <Description>A lightweight utility library for console operations with logging, delay, and exit functions</Description>
-    <PackageTags>console;logging;utility;dryfish;ilib</PackageTags>
-    <RepositoryUrl>https://github.com/dryfish/ilib</RepositoryUrl>
+    <Description>Simple C# library for logging, delay, and console utilities</Description>
+    <PackageTags>console;logging;utility;dryfish;ilib;dotnet</PackageTags>
+    <PackageProjectUrl>https://github.com/dryfish09/ILib</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dryfish09/ILib</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     
-    <!-- SourceLink for debugging -->
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <!-- Tạo XML documentation -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(PackageId).xml</DocumentationFile>
+    
+    <!-- Tạo symbols cho debugging -->
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     
+    <!-- Source linking cho debugging -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    
     <!-- Output -->
-    <OutputPath>bin\$(Configuration)\</OutputPath>
-    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\DryFish.ILib.xml</DocumentationFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)'=='Release'">
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>../../nupkg</PackageOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- SourceLink cho debugging -->
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Đưa README vào package -->
+    <None Include="../../README.md" Pack="true" PackagePath="/"/>
   </ItemGroup>
 </Project>
