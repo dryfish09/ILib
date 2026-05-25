@@ -1,0 +1,67 @@
+version: 2
+updates:
+  # NuGet packages (chính)
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Asia/Ho_Chi_Minh"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "nuget"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    groups:
+      xunit:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+      minor-patches:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Main project
+  - package-ecosystem: "nuget"
+    directory: "/src/main/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "main-project"
+
+  # Test project
+  - package-ecosystem: "nuget"
+    directory: "/src/test/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "test-project"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  # .NET SDK (qua global.json)
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    labels:
+      - "sdk-update"
+    open-pull-requests-limit: 3
