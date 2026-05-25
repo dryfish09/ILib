@@ -308,10 +308,15 @@ public static class ILib
 
     private static void SetBackgroundColor(string color)
     {
+        // Called from within lock, no need for additional locking
         var consoleColor = ParseColor(color);
         if (consoleColor.HasValue)
         {
             Console.BackgroundColor = consoleColor.Value;
+        }
+        else
+        {
+            IWarn($"Unknown background color: {color}");
         }
     }
 
@@ -319,45 +324,45 @@ public static class ILib
     {
         offset = offset.Trim();
         bool isNegative = offset.StartsWith('-');
-        
         var numberPart = offset.TrimStart('+', '-');
         
         int hours;
         int minutes = 0;
         
-        if (numberPart.Length >= 3 && numberPart.Length <= 4)
+        if (numberPart.Contains(':'))
         {
-            if (numberPart.Contains(':'))
-            {
-                var parts = numberPart.Split(':');
-                hours = int.Parse(parts[0]);
-                if (parts.Length > 1)
-                    minutes = int.Parse(parts[1]);
-            }
-            else if (numberPart.Length >= 3 && numberPart.Length <= 4)
-            {
-                if (numberPart.Length <= 2)
-                {
-                    hours = int.Parse(numberPart);
-                }
-                else
-                {
-                    hours = int.Parse(numberPart.Substring(0, numberPart.Length - 2));
-                    minutes = int.Parse(numberPart.Substring(numberPart.Length - 2));
-                }
-            }
-            else
-            {
-                hours = int.Parse(numberPart);
-            }
+            // Format: "7:30" or "07:30"
+            var parts = numberPart.Split(':');
+            hours = int.Parse(parts[0]);
+            if (parts.Length > 1)
+                minutes = int.Parse(parts[1]);
+        }
+        else if (numberPart.Length >= 3 && numberPart.Length <= 4)
+        {
+            // Format: "0730" or "530" (HHMM or HMM)
+            hours = int.Parse(numberPart.Substring(0, numberPart.Length - 2));
+            minutes = int.Parse(numberPart.Substring(numberPart.Length - 2));
         }
         else
         {
+            // Format: "7", "07", "14"
             hours = int.Parse(numberPart);
         }
         
-        var timeSpan = new TimeSpan(hours, minutes, 0);
+        // Validate minutes (0-59)
+        if (minutes < 0 || minutes >= 60)
+        {
+            IWarn($"Invalid minutes in offset: {minutes}. Using 0.");
+            minutes = 0;
+        }
         
+        // Validate hours (-12 to +14 typical range, but allow all)
+        if (hours < -12 || hours > 14)
+        {
+            IWarn($"Unusual hour offset: {hours}. This may be correct for some timezones.");
+        }
+        
+        var timeSpan = new TimeSpan(hours, minutes, 0);
         return isNegative ? -timeSpan : timeSpan;
     }
 
