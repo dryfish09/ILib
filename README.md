@@ -32,7 +32,7 @@ NuGet\Install-Package DryFish.ILib
 
 ### PackageReference
 ```xml
-<PackageReference Include="DryFish.ILib" Version="1.0.0" />
+<PackageReference Include="DryFish.ILib" Version="2026.2.0" />
 ```
 
 ## 🚀 Quick Start
