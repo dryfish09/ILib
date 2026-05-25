@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace DryFish.ILib;
 
 /// <summary>
