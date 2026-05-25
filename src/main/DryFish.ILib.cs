@@ -13,8 +13,8 @@ public static class ILib
     private static bool _colorsSaved = false;
     private static bool _debugEnabled = false;
 
-    // ========== Existing Methods ==========
-    
+    // ========== Basic Logging Methods ==========
+
     /// <summary>
     /// Displays a notice message to the console.
     /// </summary>
@@ -141,6 +141,8 @@ public static class ILib
         }
     }
 
+    // ========== Delay Methods ==========
+
     /// <summary>
     /// Pauses the current thread for the specified number of milliseconds.
     /// </summary>
@@ -161,6 +163,8 @@ public static class ILib
         if (milliseconds > 0)
             await Task.Delay(milliseconds);
     }
+
+    // ========== Exit Method ==========
 
     /// <summary>
     /// Exits the current application with the specified exit code.
@@ -202,7 +206,7 @@ public static class ILib
     }
 
     /// <summary>
-    /// Reads a key press from the console with null safety.
+    /// Reads a key press from the console.
     /// </summary>
     /// <returns>The key info, or null if not available.</returns>
     public static ConsoleKeyInfo? IReadKey()
@@ -261,78 +265,24 @@ public static class ILib
         }
     }
 
-    // ========== Error Handling ==========
+    // ========== Console Methods ==========
 
     /// <summary>
-    /// Handles an exception with optional logging and graceful exit.
+    /// Clears the console screen. Handles IOException gracefully when output is redirected.
     /// </summary>
-    /// <param name="ex">The exception to handle.</param>
-    /// <param name="exitCode">Optional exit code. If provided, exits application.</param>
-    /// <returns>True if handled gracefully.</returns>
-    public static bool IHandleError(Exception ex, int? exitCode = null)
+    public static void IClearConsole()
     {
-        bool shouldExit = false;
-        int exitCodeValue = 0;
-        
         lock (_consoleLock)
         {
-            ILogError($"Exception: {ex.Message}");
-            
-            if (_debugEnabled && ex.StackTrace != null)
+            try
             {
-                ILogDebug($"Stack trace: {ex.StackTrace}");
+                Console.Clear();
             }
-            
-            if (ex.InnerException != null)
+            catch (IOException)
             {
-                IWarn($"Inner exception: {ex.InnerException.Message}");
-            }
-            
-            if (exitCode.HasValue)
-            {
-                shouldExit = true;
-                exitCodeValue = exitCode.Value;
-                IWarn($"Exiting with code {exitCodeValue}");
+                // Safe to ignore if console output is redirected (e.g., in CI/CD pipelines)
             }
         }
-        
-        if (shouldExit)
-        {
-            IExit(exitCodeValue);
-        }
-        
-        return true;
-    }
-
-    /// <summary>
-    /// Handles an error message without exception.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="exitCode">Optional exit code.</param>
-    /// <returns>True if handled.</returns>
-    public static bool IHandleError(string errorMessage, int? exitCode = null)
-    {
-        bool shouldExit = false;
-        int exitCodeValue = 0;
-        
-        lock (_consoleLock)
-        {
-            ILogError(errorMessage);
-            
-            if (exitCode.HasValue)
-            {
-                shouldExit = true;
-                exitCodeValue = exitCode.Value;
-                IWarn($"Exiting with code {exitCodeValue}");
-            }
-        }
-        
-        if (shouldExit)
-        {
-            IExit(exitCodeValue);
-        }
-        
-        return true;
     }
 
     // ========== Console Color Methods ==========
@@ -466,6 +416,86 @@ public static class ILib
         var tz = GetTimeZoneInfo(timezoneId);
         var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
         return localTime.ToString(format);
+    }
+
+    // ========== Error Handling Methods ==========
+
+    /// <summary>
+    /// Handles an exception with optional logging and graceful exit.
+    /// </summary>
+    /// <param name="ex">The exception to handle.</param>
+    /// <param name="exitCode">Optional exit code. If provided, exits application.</param>
+    /// <returns>True if handled gracefully.</returns>
+    public static bool IHandleError(Exception ex, int? exitCode = null)
+    {
+        // Null check to prevent NullReferenceException
+        if (ex == null)
+        {
+            return IHandleError("Null exception encountered.", exitCode);
+        }
+        
+        bool shouldExit = false;
+        int exitCodeValue = 0;
+        
+        lock (_consoleLock)
+        {
+            ILogError($"Exception: {ex.Message}");
+            
+            if (_debugEnabled && ex.StackTrace != null)
+            {
+                ILogDebug($"Stack trace: {ex.StackTrace}");
+            }
+            
+            if (ex.InnerException != null)
+            {
+                IWarn($"Inner exception: {ex.InnerException.Message}");
+            }
+            
+            if (exitCode.HasValue)
+            {
+                shouldExit = true;
+                exitCodeValue = exitCode.Value;
+                IWarn($"Exiting with code {exitCodeValue}");
+            }
+        }
+        
+        if (shouldExit)
+        {
+            IExit(exitCodeValue);
+        }
+        
+        return true;
+    }
+
+    /// <summary>
+    /// Handles an error message without exception.
+    /// </summary>
+    /// <param name="errorMessage">The error message.</param>
+    /// <param name="exitCode">Optional exit code.</param>
+    /// <returns>True if handled.</returns>
+    public static bool IHandleError(string errorMessage, int? exitCode = null)
+    {
+        bool shouldExit = false;
+        int exitCodeValue = 0;
+        
+        lock (_consoleLock)
+        {
+            ILogError(errorMessage);
+            
+            if (exitCode.HasValue)
+            {
+                shouldExit = true;
+                exitCodeValue = exitCode.Value;
+                IWarn($"Exiting with code {exitCodeValue}");
+            }
+        }
+        
+        if (shouldExit)
+        {
+            IExit(exitCodeValue);
+        }
+        
+        return true;
     }
 
     // ========== Configuration ==========
