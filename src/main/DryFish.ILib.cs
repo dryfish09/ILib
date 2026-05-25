@@ -9,6 +9,7 @@ public static class ILib
     private static ConsoleColor _originalForegroundColor;
     private static ConsoleColor _originalBackgroundColor;
     private static bool _colorsSaved = false;
+    private static bool _debugEnabled = false;
 
     // ========== Existing Methods ==========
     
@@ -49,7 +50,43 @@ public static class ILib
         {
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"[INFO] {DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}");
+            var timestamp = GetTimestamp();
+            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
+            Console.WriteLine($"[INFO]{timestampPart} - {message}");
+            Console.ForegroundColor = originalColor;
+        }
+    }
+
+    /// <summary>
+    /// Displays an error log message in red color.
+    /// </summary>
+    /// <param name="message">The error message to display.</param>
+    public static void ILogError(string message)
+    {
+        lock (_consoleLock)
+        {
+            var originalColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Red;
+            var timestamp = GetTimestamp();
+            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
+            Console.Error.WriteLine($"[ERROR]{timestampPart} - {message}");
+            Console.ForegroundColor = originalColor;
+        }
+    }
+
+    /// <summary>
+    /// Displays a completion/success message in green color.
+    /// </summary>
+    /// <param name="message">The completion message to display.</param>
+    public static void ILogComplete(string message)
+    {
+        lock (_consoleLock)
+        {
+            var originalColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Green;
+            var timestamp = GetTimestamp();
+            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
+            Console.WriteLine($"[COMPLETE]{timestampPart} - ✓ {message}");
             Console.ForegroundColor = originalColor;
         }
     }
@@ -63,17 +100,20 @@ public static class ILib
     {
         lock (_consoleLock)
         {
-            Console.WriteLine($"[{prefix}] {DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}");
+            var timestamp = GetTimestamp();
+            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
+            Console.WriteLine($"[{prefix}]{timestampPart} - {message}");
         }
     }
 
     /// <summary>
-    /// Displays a debug log message in cyan color. Only appears in DEBUG builds.
+    /// Displays a debug log message in cyan color. Only appears if debug is enabled.
     /// </summary>
     /// <param name="message">The debug message to display.</param>
     public static void ILogDebug(string message)
     {
-#if DEBUG
+        if (!_debugEnabled) return;
+        
         lock (_consoleLock)
         {
             var originalColor = Console.ForegroundColor;
@@ -81,7 +121,22 @@ public static class ILib
             Console.WriteLine($"[DEBUG] {DateTime.Now:HH:mm:ss.fff} - {message}");
             Console.ForegroundColor = originalColor;
         }
-#endif
+    }
+
+    /// <summary>
+    /// Enables or disables debug logging.
+    /// </summary>
+    /// <param name="enabled">True to enable debug logging, false to disable.</param>
+    public static void ISetDebug(bool enabled)
+    {
+        lock (_consoleLock)
+        {
+            _debugEnabled = enabled;
+            if (enabled)
+            {
+                Console.WriteLine("[DEBUG] Debug logging enabled");
+            }
+        }
     }
 
     /// <summary>
@@ -114,7 +169,171 @@ public static class ILib
         Environment.Exit(exitCode);
     }
 
-    // ========== New Methods ==========
+    // ========== Input Methods ==========
+
+    /// <summary>
+    /// Reads a line of input from the console with null safety.
+    /// </summary>
+    /// <returns>The input string, or empty string if null.</returns>
+    public static string IReadLine()
+    {
+        lock (_consoleLock)
+        {
+            var input = Console.ReadLine();
+            return input ?? string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Reads a line of input with a custom prompt.
+    /// </summary>
+    /// <param name="prompt">The prompt to display before reading input.</param>
+    /// <returns>The input string, or empty string if null.</returns>
+    public static string IReadLine(string prompt)
+    {
+        lock (_consoleLock)
+        {
+            Console.Write(prompt);
+            var input = Console.ReadLine();
+            return input ?? string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Reads a key press from the console with null safety.
+    /// </summary>
+    /// <returns>The key info, or null if not available.</returns>
+    public static ConsoleKeyInfo? IReadKey()
+    {
+        lock (_consoleLock)
+        {
+            try
+            {
+                return Console.ReadKey(true);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads a key press with optional display.
+    /// </summary>
+    /// <param name="intercept">Whether to intercept the key (not display it).</param>
+    /// <returns>The key info, or null if not available.</returns>
+    public static ConsoleKeyInfo? IReadKey(bool intercept)
+    {
+        lock (_consoleLock)
+        {
+            try
+            {
+                return Console.ReadKey(intercept);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads a key press with a custom prompt.
+    /// </summary>
+    /// <param name="prompt">The prompt to display.</param>
+    /// <returns>The key info, or null if not available.</returns>
+    public static ConsoleKeyInfo? IReadKey(string prompt)
+    {
+        lock (_consoleLock)
+        {
+            Console.Write(prompt);
+            try
+            {
+                return Console.ReadKey(true);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    // ========== Error Handling ==========
+
+    /// <summary>
+    /// Handles an exception with optional logging and graceful exit.
+    /// </summary>
+    /// <param name="ex">The exception to handle.</param>
+    /// <param name="exitCode">Optional exit code. If provided, exits application.</param>
+    /// <returns>True if handled gracefully.</returns>
+    public static bool IHandleError(Exception ex, int? exitCode = null)
+    {
+        bool shouldExit = false;
+        int exitCodeValue = 0;
+        
+        lock (_consoleLock)
+        {
+            ILogError($"Exception: {ex.Message}");
+            
+            if (_debugEnabled && ex.StackTrace != null)
+            {
+                ILogDebug($"Stack trace: {ex.StackTrace}");
+            }
+            
+            if (ex.InnerException != null)
+            {
+                IWarn($"Inner exception: {ex.InnerException.Message}");
+            }
+            
+            if (exitCode.HasValue)
+            {
+                shouldExit = true;
+                exitCodeValue = exitCode.Value;
+                IWarn($"Exiting with code {exitCodeValue}");
+            }
+        }
+        
+        if (shouldExit)
+        {
+            IExit(exitCodeValue);
+        }
+        
+        return true;
+    }
+
+    /// <summary>
+    /// Handles an error message without exception.
+    /// </summary>
+    /// <param name="errorMessage">The error message.</param>
+    /// <param name="exitCode">Optional exit code.</param>
+    /// <returns>True if handled.</returns>
+    public static bool IHandleError(string errorMessage, int? exitCode = null)
+    {
+        bool shouldExit = false;
+        int exitCodeValue = 0;
+        
+        lock (_consoleLock)
+        {
+            ILogError(errorMessage);
+            
+            if (exitCode.HasValue)
+            {
+                shouldExit = true;
+                exitCodeValue = exitCode.Value;
+                IWarn($"Exiting with code {exitCodeValue}");
+            }
+        }
+        
+        if (shouldExit)
+        {
+            IExit(exitCodeValue);
+        }
+        
+        return true;
+    }
+
+    // ========== Console Color Methods ==========
 
     /// <summary>
     /// Sets the console foreground color using a color name (e.g., "red") or hex code (e.g., "#FF0000").
@@ -191,6 +410,8 @@ public static class ILib
         }
     }
 
+    // ========== Timezone Methods ==========
+
     /// <summary>
     /// Gets the current UTC time adjusted for the specified timezone offset.
     /// </summary>
@@ -221,35 +442,85 @@ public static class ILib
     }
 
     /// <summary>
-    /// Gets the current time for a specific IANA timezone.
+    /// Gets the current time for a specific timezone (cross-platform compatible).
     /// </summary>
     /// <param name="timezoneId">IANA timezone ID (e.g., "Asia/Ho_Chi_Minh", "America/New_York").</param>
     /// <returns>Formatted datetime string in "yyyy-MM-dd HH:mm:ss" format.</returns>
     public static string IGetTimeZone(string timezoneId)
     {
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
-            var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            return localTime.ToString("yyyy-MM-dd HH:mm:ss");
-        }
-        catch
-        {
-            try
-            {
-                var tz = TimeZoneInfo.FindSystemTimeZoneById(ConvertToWindowsTimezone(timezoneId));
-                var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-                return localTime.ToString("yyyy-MM-dd HH:mm:ss");
-            }
-            catch
-            {
-                IWarn($"Unknown timezone: {timezoneId}");
-                return DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
-            }
-        }
+        var tz = GetTimeZoneInfo(timezoneId);
+        var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        return localTime.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    /// <summary>
+    /// Gets the current time for a specific timezone with custom format.
+    /// </summary>
+    /// <param name="timezoneId">IANA timezone ID.</param>
+    /// <param name="format">Custom datetime format.</param>
+    /// <returns>Formatted datetime string.</returns>
+    public static string IGetTimeZone(string timezoneId, string format)
+    {
+        var tz = GetTimeZoneInfo(timezoneId);
+        var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        return localTime.ToString(format);
+    }
+
+    // ========== Configuration ==========
+
+    /// <summary>
+    /// Gets or sets whether timestamps are shown in logs.
+    /// </summary>
+    public static bool ShowTimestamps { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the timestamp format.
+    /// </summary>
+    public static string TimestampFormat { get; set; } = "yyyy-MM-dd HH:mm:ss";
+
+    private static string GetTimestamp()
+    {
+        return ShowTimestamps ? DateTime.Now.ToString(TimestampFormat) : string.Empty;
     }
 
     // ========== Private Helper Methods ==========
+
+    private static TimeZoneInfo GetTimeZoneInfo(string timezoneId)
+    {
+        // Try direct lookup first
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+        }
+        catch { /* Continue to next method */ }
+
+        // On Windows, try IANA to Windows conversion
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var windowsId = ConvertToWindowsTimezone(timezoneId);
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
+            }
+            catch { /* Fall through to UTC */ }
+        }
+
+        // On Linux/Mac, try Windows to IANA conversion
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || 
+            RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            var ianaId = ConvertToIANATimezone(timezoneId);
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(ianaId);
+            }
+            catch { /* Fall through to UTC */ }
+        }
+
+        // Fallback to UTC
+        IWarn($"Cannot find timezone '{timezoneId}', using UTC");
+        return TimeZoneInfo.Utc;
+    }
 
     private static ConsoleColor? ParseColor(string color)
     {
@@ -308,7 +579,6 @@ public static class ILib
 
     private static void SetBackgroundColor(string color)
     {
-        // Called from within lock, no need for additional locking
         var consoleColor = ParseColor(color);
         if (consoleColor.HasValue)
         {
@@ -331,7 +601,6 @@ public static class ILib
         
         if (numberPart.Contains(':'))
         {
-            // Format: "7:30" or "07:30"
             var parts = numberPart.Split(':');
             hours = int.Parse(parts[0]);
             if (parts.Length > 1)
@@ -339,27 +608,18 @@ public static class ILib
         }
         else if (numberPart.Length >= 3 && numberPart.Length <= 4)
         {
-            // Format: "0730" or "530" (HHMM or HMM)
             hours = int.Parse(numberPart.Substring(0, numberPart.Length - 2));
             minutes = int.Parse(numberPart.Substring(numberPart.Length - 2));
         }
         else
         {
-            // Format: "7", "07", "14"
             hours = int.Parse(numberPart);
         }
         
-        // Validate minutes (0-59)
         if (minutes < 0 || minutes >= 60)
         {
             IWarn($"Invalid minutes in offset: {minutes}. Using 0.");
             minutes = 0;
-        }
-        
-        // Validate hours (-12 to +14 typical range, but allow all)
-        if (hours < -12 || hours > 14)
-        {
-            IWarn($"Unusual hour offset: {hours}. This may be correct for some timezones.");
         }
         
         var timeSpan = new TimeSpan(hours, minutes, 0);
@@ -371,17 +631,51 @@ public static class ILib
         return ianaTimeZone switch
         {
             "Asia/Ho_Chi_Minh" or "Asia/Saigon" or "Asia/Bangkok" => "SE Asia Standard Time",
+            "Asia/Jakarta" => "SE Asia Standard Time",
+            "Asia/Singapore" => "Singapore Standard Time",
+            "Asia/Tokyo" => "Tokyo Standard Time",
+            "Asia/Shanghai" => "China Standard Time",
+            "Asia/Kolkata" => "India Standard Time",
+            "Asia/Dubai" => "Arabian Standard Time",
             "America/New_York" => "Eastern Standard Time",
             "America/Los_Angeles" => "Pacific Standard Time",
             "America/Chicago" => "Central Standard Time",
             "America/Denver" => "Mountain Standard Time",
+            "America/Toronto" => "Eastern Standard Time",
+            "America/Vancouver" => "Pacific Standard Time",
             "Europe/London" => "GMT Standard Time",
             "Europe/Paris" => "Romance Standard Time",
             "Europe/Berlin" => "Central Europe Standard Time",
-            "Asia/Tokyo" => "Tokyo Standard Time",
-            "Asia/Shanghai" => "China Standard Time",
+            "Europe/Moscow" => "Russian Standard Time",
             "Australia/Sydney" => "AUS Eastern Standard Time",
+            "Australia/Perth" => "W. Australia Standard Time",
+            "Pacific/Auckland" => "New Zealand Standard Time",
             _ => ianaTimeZone
+        };
+    }
+
+    private static string ConvertToIANATimezone(string windowsTimeZone)
+    {
+        return windowsTimeZone switch
+        {
+            "SE Asia Standard Time" => "Asia/Bangkok",
+            "Singapore Standard Time" => "Asia/Singapore",
+            "Tokyo Standard Time" => "Asia/Tokyo",
+            "China Standard Time" => "Asia/Shanghai",
+            "India Standard Time" => "Asia/Kolkata",
+            "Arabian Standard Time" => "Asia/Dubai",
+            "Eastern Standard Time" => "America/New_York",
+            "Pacific Standard Time" => "America/Los_Angeles",
+            "Central Standard Time" => "America/Chicago",
+            "Mountain Standard Time" => "America/Denver",
+            "GMT Standard Time" => "Europe/London",
+            "Romance Standard Time" => "Europe/Paris",
+            "Central Europe Standard Time" => "Europe/Berlin",
+            "Russian Standard Time" => "Europe/Moscow",
+            "AUS Eastern Standard Time" => "Australia/Sydney",
+            "W. Australia Standard Time" => "Australia/Perth",
+            "New Zealand Standard Time" => "Pacific/Auckland",
+            _ => windowsTimeZone
         };
     }
 }
