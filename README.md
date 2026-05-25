@@ -14,6 +14,7 @@ A simple, lightweight C# library for console operations, logging, delays, and ap
 - ⏱️ **Delays** - Both synchronous and asynchronous delay methods
 - 🎨 **Colored Console** - Set colors by name (red, green) or hex code (#FF0000)
 - ⌨️ **User Input** - ReadLine and ReadKey with null safety
+- 🧹 **Console Control** - Clear console screen with exception handling
 - 🌍 **Timezone Support** - Cross-platform timezone conversion (IANA & Windows)
 - 🛡️ **Error Handling** - Graceful exception handling with optional exit
 - 🔧 **Configurable** - Toggle timestamps, custom formats, debug mode
@@ -34,7 +35,7 @@ NuGet\Install-Package DryFish.ILib
 
 ### PackageReference
 ```xml
-<PackageReference Include="DryFish.ILib" Version="2026.3.0" />
+<PackageReference Include="DryFish.ILib" Version="2026.4.0" />
 ```
 
 ## 🚀 Quick Start
@@ -89,6 +90,12 @@ ILib.ILogInfo($"Vietnam time: {vnTime}");
 | `IReadKey()` | Read single key | `var key = ILib.IReadKey();` |
 | `IReadKey(bool intercept)` | Read key with display option | `ILib.IReadKey(true);` |
 | `IReadKey(string prompt)` | Read key with prompt | `ILib.IReadKey("Press any key...");` |
+
+### Console Methods
+
+| Method | Description | Example |
+|--------|-------------|---------|
+| `IClearConsole()` | Clear the console screen | `ILib.IClearConsole();` |
 
 ### Console Color Methods
 
@@ -161,6 +168,14 @@ ILib.INotice("Yellow on blue");
 ILib.IResetConsoleColor();
 ```
 
+### Clear Console
+```csharp
+ILib.INotice("Press any key to clear screen...");
+ILib.IReadKey();
+ILib.IClearConsole();
+ILib.INotice("Screen cleared!");
+```
+
 ### User Input
 ```csharp
 string name = ILib.IReadLine("Enter your name: ");
@@ -209,6 +224,9 @@ catch (Exception ex)
 {
     ILib.IHandleError(ex, 1); // Logs error and exits with code 1
 }
+
+// Handle null exception safely
+ILib.IHandleError(null as Exception); // Handles gracefully
 ```
 
 ### Configuration
@@ -293,12 +311,18 @@ ILib/
 └── DryFish.ILib.sln
 ```
 
+## 📋 Requirements
+
+- .NET 8.0 or later
+- Compatible with Windows, Linux, and macOS
+
 ## 🗺️ Roadmap
 
 - [x] Basic logging (Notice, Warn, Info)
 - [x] Sync/Async delays
 - [x] Console colors (names & hex)
 - [x] User input methods
+- [x] Clear console screen
 - [x] Cross-platform timezone
 - [x] Error handling
 - [x] Debug mode
@@ -306,6 +330,7 @@ ILib/
 - [ ] File logging
 - [ ] JSON configuration
 - [ ] Structured logging
+- [ ] Log rotation
 
 ## 🤝 Contributing
 
@@ -330,6 +355,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 - Tested with xUnit
 - CI/CD with GitHub Actions
 - Cross-platform timezone support
+- Dependabot for automated dependency updates
 
 ## 📞 Support
 
