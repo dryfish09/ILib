@@ -5,7 +5,7 @@
 [![NuGet Version](https://img.shields.io/nuget/v/DryFish.ILib)](https://www.nuget.org/packages/DryFish.ILib)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/DryFish.ILib)](https://www.nuget.org/packages/DryFish.ILib)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Codecov](https://codecov.io/gh/dryfish09/ILib/branch/main/graph/badge.svg)](https://codecov.io/gh/dryfish09/ILib)
+
 
 A simple, lightweight C# library for console operations, logging, delays, and application control.
 
@@ -204,4 +204,3 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 **Made with ❤️ by DryFish**
 
-Bạn đã có file README.md trong repository chưa? Nếu chưa, hãy tạo file này và commit lên GitHub!
