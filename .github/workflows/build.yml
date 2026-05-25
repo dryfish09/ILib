@@ -1,4 +1,4 @@
-packages: Build and Test DryFish.ILib
+name: Build and Test DryFish.ILib
 
 on:
   push:
@@ -6,9 +6,11 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+
 permissions:
-  contents: write  # Cho phép tạo release
-  packages: write   # Cho phép upload packages
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,7 +23,7 @@ jobs:
       with:
         dotnet-version: '8.0.x'
     
-    - name: Restore dependencies
+    - name: Restore
       run: dotnet restore src/main/DryFish.ILib.csproj
     
     - name: Build
@@ -30,7 +32,7 @@ jobs:
     - name: Test
       run: dotnet test src/test/DryFish.ILib.Test.csproj --configuration Release --no-build --verbosity normal
     
-    - name: Pack NuGet
+    - name: Pack
       run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release --no-build --output ./artifacts
     
     - name: Upload artifacts
@@ -52,17 +54,36 @@ jobs:
       with:
         dotnet-version: '8.0.x'
     
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-packages
+        path: ./artifacts
+    
     - name: Get version
       run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
     
-    - name: Pack
-      run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release -p:PackageVersion=${{ env.VERSION }} --output ./artifacts
+    - name: Pack with version
+      run: |
+        dotnet pack src/main/DryFish.ILib.csproj \
+          --configuration Release \
+          -p:PackageVersion=${{ env.VERSION }} \
+          --output ./artifacts
     
-    - name: Publish to NuGet
-      run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+    - name: Push to NuGet
+      run: |
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
     
-    - name: Create Release
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         files: ./artifacts/*.nupkg
         generate_release_notes: true
+        name: Release v${{ env.VERSION }}
+        tag_name: ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
