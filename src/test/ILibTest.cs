@@ -117,9 +117,6 @@ public class ILibTests
         
         var result = ILib.IReadLine();
         Assert.Equal("test input", result);
-        
-        var standardInput = new StreamReader(Console.OpenStandardInput());
-        Console.SetIn(standardInput);
     }
 
     [Fact]
@@ -133,8 +130,20 @@ public class ILibTests
     }
 
     [Fact]
-    public void IReadLine_EmptyInput_ReturnsEmptyString()
+    public void IReadLine_WithNullInput_ShouldReturnEmpty()
     {
+        // StringReader("") makes ReadLine() return null
+        var input = new StringReader("");
+        Console.SetIn(input);
+        
+        var result = ILib.IReadLine();
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void IReadLine_WithEmptyLine_ShouldReturnEmpty()
+    {
+        // StringReader("\n") makes ReadLine() return empty string
         var input = new StringReader("\n");
         Console.SetIn(input);
         
@@ -275,6 +284,13 @@ public class ILibTests
     {
         var ex = new InvalidOperationException("Test exception");
         var result = ILib.IHandleError(ex);
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void IHandleError_WithNullException_ShouldNotThrow()
+    {
+        var result = ILib.IHandleError(null as Exception);
         Assert.True(result);
     }
 
