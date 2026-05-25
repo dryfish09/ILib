@@ -268,13 +268,20 @@ public static class ILib
     // ========== Console Methods ==========
 
     /// <summary>
-    /// Clears the console screen.
+    /// Clears the console screen. Handles IOException gracefully when output is redirected.
     /// </summary>
     public static void IClearConsole()
     {
         lock (_consoleLock)
         {
-            Console.Clear();
+            try
+            {
+                Console.Clear();
+            }
+            catch (IOException)
+            {
+                // Safe to ignore if console output is redirected (e.g., in CI/CD pipelines)
+            }
         }
     }
 
@@ -421,6 +428,12 @@ public static class ILib
     /// <returns>True if handled gracefully.</returns>
     public static bool IHandleError(Exception ex, int? exitCode = null)
     {
+        // Null check to prevent NullReferenceException
+        if (ex == null)
+        {
+            return IHandleError("Null exception encountered.", exitCode);
+        }
+        
         bool shouldExit = false;
         int exitCodeValue = 0;
         
