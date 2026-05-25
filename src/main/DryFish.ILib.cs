@@ -1,5 +1,8 @@
 namespace DryFish.ILib;
 
+/// <summary>
+/// A lightweight utility library for console operations, logging, delays, and application control.
+/// </summary>
 public static class ILib
 {
     private static readonly object _consoleLock = new object();
@@ -9,6 +12,10 @@ public static class ILib
 
     // ========== Existing Methods ==========
     
+    /// <summary>
+    /// Displays a notice message to the console.
+    /// </summary>
+    /// <param name="message">The notice message to display.</param>
     public static void INotice(string message)
     {
         lock (_consoleLock)
@@ -17,6 +24,10 @@ public static class ILib
         }
     }
 
+    /// <summary>
+    /// Displays a warning message in yellow color.
+    /// </summary>
+    /// <param name="message">The warning message to display.</param>
     public static void IWarn(string message)
     {
         lock (_consoleLock)
@@ -28,6 +39,10 @@ public static class ILib
         }
     }
 
+    /// <summary>
+    /// Displays an informational log message with timestamp in green color.
+    /// </summary>
+    /// <param name="message">The info message to display.</param>
     public static void ILogInfo(string message)
     {
         lock (_consoleLock)
@@ -39,6 +54,11 @@ public static class ILib
         }
     }
 
+    /// <summary>
+    /// Displays a custom log message with a specified prefix and timestamp.
+    /// </summary>
+    /// <param name="prefix">The custom prefix for the log entry.</param>
+    /// <param name="message">The log message to display.</param>
     public static void ILog(string prefix, string message)
     {
         lock (_consoleLock)
@@ -47,6 +67,10 @@ public static class ILib
         }
     }
 
+    /// <summary>
+    /// Displays a debug log message in cyan color. Only appears in DEBUG builds.
+    /// </summary>
+    /// <param name="message">The debug message to display.</param>
     public static void ILogDebug(string message)
     {
 #if DEBUG
@@ -60,18 +84,31 @@ public static class ILib
 #endif
     }
 
+    /// <summary>
+    /// Pauses the current thread for the specified number of milliseconds.
+    /// </summary>
+    /// <param name="milliseconds">The number of milliseconds to delay. Positive values only.</param>
     public static void IDelay(int milliseconds)
     {
         if (milliseconds > 0)
             Thread.Sleep(milliseconds);
     }
 
+    /// <summary>
+    /// Asynchronously delays for the specified number of milliseconds.
+    /// </summary>
+    /// <param name="milliseconds">The number of milliseconds to delay. Positive values only.</param>
+    /// <returns>A task that completes after the specified delay.</returns>
     public static async Task IDelayAsync(int milliseconds)
     {
         if (milliseconds > 0)
             await Task.Delay(milliseconds);
     }
 
+    /// <summary>
+    /// Exits the current application with the specified exit code.
+    /// </summary>
+    /// <param name="exitCode">The exit code to return to the operating system.</param>
     public static void IExit(int exitCode)
     {
         Environment.Exit(exitCode);
@@ -80,14 +117,13 @@ public static class ILib
     // ========== New Methods ==========
 
     /// <summary>
-    /// Set console foreground color using color name or hex code
+    /// Sets the console foreground color using a color name (e.g., "red") or hex code (e.g., "#FF0000").
     /// </summary>
-    /// <param name="color">Color name (red, green, blue) or hex (#FF0000)</param>
+    /// <param name="color">Color name (red, green, blue, yellow, cyan, magenta, white, black, gray) or hex code (#RRGGBB).</param>
     public static void ISetConsoleColor(string color)
     {
         lock (_consoleLock)
         {
-            // Save original colors first time
             if (!_colorsSaved)
             {
                 _originalForegroundColor = Console.ForegroundColor;
@@ -102,7 +138,6 @@ public static class ILib
             }
             else
             {
-                // Try to parse as hex
                 try
                 {
                     var hexColor = ParseHexColor(color);
@@ -124,10 +159,10 @@ public static class ILib
     }
 
     /// <summary>
-    /// Set console foreground and background colors
+    /// Sets both console foreground and background colors.
     /// </summary>
-    /// <param name="foregroundColor">Text color name or hex</param>
-    /// <param name="backgroundColor">Background color name or hex</param>
+    /// <param name="foregroundColor">Text color name or hex code.</param>
+    /// <param name="backgroundColor">Background color name or hex code.</param>
     public static void ISetConsoleColor(string foregroundColor, string backgroundColor)
     {
         lock (_consoleLock)
@@ -138,7 +173,7 @@ public static class ILib
     }
 
     /// <summary>
-    /// Reset console colors to original/default values
+    /// Resets console colors to their original/default values.
     /// </summary>
     public static void IResetConsoleColor()
     {
@@ -151,17 +186,16 @@ public static class ILib
             }
             else
             {
-                // Default console colors
                 Console.ResetColor();
             }
         }
     }
 
     /// <summary>
-    /// Get UTC time with timezone offset
+    /// Gets the current UTC time adjusted for the specified timezone offset.
     /// </summary>
-    /// <param name="utcOffset">Timezone offset (e.g., +7, -5, +0530 for half-hour offsets)</param>
-    /// <returns>Formatted datetime string</returns>
+    /// <param name="utcOffset">Timezone offset (e.g., "+7", "-5", "+0530", "+7:30").</param>
+    /// <returns>Formatted datetime string in "yyyy-MM-dd HH:mm:ss" format.</returns>
     public static string IGetTimeUtc(string utcOffset)
     {
         var offset = ParseTimezoneOffset(utcOffset);
@@ -172,11 +206,11 @@ public static class ILib
     }
 
     /// <summary>
-    /// Get UTC time with timezone offset and custom format
+    /// Gets the current UTC time adjusted for the specified timezone offset with custom format.
     /// </summary>
-    /// <param name="utcOffset">Timezone offset (e.g., +7, -5)</param>
-    /// <param name="format">Custom datetime format</param>
-    /// <returns>Formatted datetime string</returns>
+    /// <param name="utcOffset">Timezone offset (e.g., "+7", "-5").</param>
+    /// <param name="format">Custom datetime format string.</param>
+    /// <returns>Formatted datetime string.</returns>
     public static string IGetTimeUtc(string utcOffset, string format)
     {
         var offset = ParseTimezoneOffset(utcOffset);
@@ -187,10 +221,10 @@ public static class ILib
     }
 
     /// <summary>
-    /// Get current time for a specific timezone
+    /// Gets the current time for a specific IANA timezone.
     /// </summary>
-    /// <param name="timezoneId">IANA timezone ID (e.g., "Asia/Ho_Chi_Minh", "America/New_York")</param>
-    /// <returns>Formatted datetime string</returns>
+    /// <param name="timezoneId">IANA timezone ID (e.g., "Asia/Ho_Chi_Minh", "America/New_York").</param>
+    /// <returns>Formatted datetime string in "yyyy-MM-dd HH:mm:ss" format.</returns>
     public static string IGetTimeZone(string timezoneId)
     {
         try
@@ -201,7 +235,6 @@ public static class ILib
         }
         catch
         {
-            // Try Windows timezone format
             try
             {
                 var tz = TimeZoneInfo.FindSystemTimeZoneById(ConvertToWindowsTimezone(timezoneId));
@@ -244,17 +277,14 @@ public static class ILib
 
     private static ConsoleColor? ParseHexColor(string hex)
     {
-        // Remove # if present
         hex = hex.TrimStart('#');
         
         if (hex.Length == 6)
         {
-            // Parse RGB components
             var r = Convert.ToInt32(hex.Substring(0, 2), 16);
             var g = Convert.ToInt32(hex.Substring(2, 2), 16);
             var b = Convert.ToInt32(hex.Substring(4, 2), 16);
             
-            // Map RGB to nearest ConsoleColor
             return MapRgbToConsoleColor(r, g, b);
         }
         
@@ -263,7 +293,6 @@ public static class ILib
 
     private static ConsoleColor MapRgbToConsoleColor(int r, int g, int b)
     {
-        // Simple mapping logic
         if (r > 200 && g < 100 && b < 100) return ConsoleColor.Red;
         if (r > 200 && g > 100 && b < 100) return ConsoleColor.DarkYellow;
         if (r > 200 && g > 200 && b < 100) return ConsoleColor.Yellow;
@@ -274,7 +303,6 @@ public static class ILib
         if (r > 200 && g > 200 && b > 200) return ConsoleColor.White;
         if (r < 80 && g < 80 && b < 80) return ConsoleColor.Black;
         
-        // Default
         return ConsoleColor.Gray;
     }
 
@@ -292,7 +320,6 @@ public static class ILib
         offset = offset.Trim();
         bool isNegative = offset.StartsWith('-');
         
-        // Remove + or - sign
         var numberPart = offset.TrimStart('+', '-');
         
         int hours;
@@ -300,7 +327,6 @@ public static class ILib
         
         if (numberPart.Length >= 3 && numberPart.Length <= 4)
         {
-            // Format: +7, +07, +0700, +7:30, +0730
             if (numberPart.Contains(':'))
             {
                 var parts = numberPart.Split(':');
@@ -310,7 +336,6 @@ public static class ILib
             }
             else if (numberPart.Length >= 3 && numberPart.Length <= 4)
             {
-                // Handle formats: 7, 07, 730, 0730
                 if (numberPart.Length <= 2)
                 {
                     hours = int.Parse(numberPart);
@@ -338,7 +363,6 @@ public static class ILib
 
     private static string ConvertToWindowsTimezone(string ianaTimeZone)
     {
-        // Common IANA to Windows timezone mappings
         return ianaTimeZone switch
         {
             "Asia/Ho_Chi_Minh" or "Asia/Saigon" or "Asia/Bangkok" => "SE Asia Standard Time",
