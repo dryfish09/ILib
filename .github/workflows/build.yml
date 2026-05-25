@@ -1,4 +1,4 @@
-name: Build and Test DryFish.ILib
+packages: Build and Test DryFish.ILib
 
 on:
   push:
@@ -6,7 +6,9 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
-
+permissions:
+  contents: write  # Cho phép tạo release
+  packages: write   # Cho phép upload packages
 jobs:
   build:
     runs-on: ubuntu-latest
