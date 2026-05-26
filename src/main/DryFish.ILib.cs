@@ -1,4 +1,13 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using System.IO;
+
+#if NET6_0_OR_GREATER
 using System.Runtime.InteropServices;
+#elif NETFRAMEWORK
+using System.Runtime.InteropServices;
+#endif
 
 namespace DryFish.ILib;
 
