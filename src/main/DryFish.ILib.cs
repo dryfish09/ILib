@@ -535,6 +535,7 @@ public static class ILib
         }
         catch { /* Continue to next method */ }
 
+#if NET6_0_OR_GREATER
         // On Windows, try IANA to Windows conversion
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -557,6 +558,15 @@ public static class ILib
             }
             catch { /* Fall through to UTC */ }
         }
+#elif NETFRAMEWORK
+        // On Windows, try IANA to Windows conversion
+        var windowsId = ConvertToWindowsTimezone(timezoneId);
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
+        }
+        catch { /* Fall through to UTC */ }
+#endif
 
         // Fallback to UTC
         IWarn($"Cannot find timezone '{timezoneId}', using UTC");
@@ -640,7 +650,8 @@ public static class ILib
         int hours;
         int minutes = 0;
         
-        if (numberPart.Contains(':'))
+        // Fix: Use IndexOf instead of Contains for .NET Framework compatibility
+        if (numberPart.IndexOf(':') >= 0)
         {
             var parts = numberPart.Split(':');
             hours = int.Parse(parts[0]);
@@ -649,11 +660,13 @@ public static class ILib
         }
         else if (numberPart.Length >= 3 && numberPart.Length <= 4)
         {
+            // Format: "0730" or "530" (HHMM or HMM)
             hours = int.Parse(numberPart.Substring(0, numberPart.Length - 2));
             minutes = int.Parse(numberPart.Substring(numberPart.Length - 2));
         }
         else
         {
+            // Format: "7", "07", "14"
             hours = int.Parse(numberPart);
         }
         
