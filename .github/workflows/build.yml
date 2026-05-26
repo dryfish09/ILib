@@ -1,4 +1,4 @@
-name: Build and Test DryFish.ILib
+name: Build, Test, and Publish DryFish.ILib
 
 on:
   push:
@@ -6,53 +6,90 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
-permissions:
-  contents: write
-  packages: write
+env:
+  DOTNET_VERSION: '8.0.x'
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-and-test:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        framework: ['net8.0', 'net7.0', 'net6.0', 'net48']
+        exclude:
+          - os: macos-latest
+            framework: 'net48'
+          - os: ubuntu-latest
+            framework: 'net48'
     
     steps:
-    - uses: actions/checkout@v6
+    - name: Checkout code
+      uses: actions/checkout@v6
     
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
     
-    - name: Restore
+    - name: Setup .NET Framework (Windows only)
+      if: runner.os == 'Windows'
+      run: |
+        echo "Using .NET Framework 4.8"
+    
+    - name: Restore dependencies
       run: dotnet restore src/main/DryFish.ILib.csproj
     
     - name: Build
-      run: dotnet build src/main/DryFish.ILib.csproj --configuration Release --no-restore
+      run: dotnet build src/main/DryFish.ILib.csproj --configuration Release --framework ${{ matrix.framework }} --no-restore
     
     - name: Test
-      run: dotnet test src/test/DryFish.ILib.Test.csproj --configuration Release --no-build --verbosity normal
+      if: matrix.framework != 'net48' || runner.os == 'Windows'
+      run: dotnet test src/test/DryFish.ILib.Test.csproj --configuration Release --framework ${{ matrix.framework }} --no-build --verbosity normal
+
+  pack:
+    name: Pack NuGet
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     
-    - name: Pack
-      run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release --no-build --output ./artifacts
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Pack NuGet package
+      run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release --output ./artifacts --include-symbols
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@v4
       with:
         name: nuget-packages
-        path: ./artifacts/*.nupkg
+        path: |
+          ./artifacts/*.nupkg
+          ./artifacts/*.snupkg
 
   publish:
-    needs: build
+    name: Publish to NuGet
+    needs: pack
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     
     steps:
-    - uses: actions/checkout@v6
+    - name: Checkout code
+      uses: actions/checkout@v6
     
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
     
     - name: Download artifacts
       uses: actions/download-artifact@v8
@@ -60,17 +97,19 @@ jobs:
         name: nuget-packages
         path: ./artifacts
     
-    - name: Get version
-      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
     
     - name: Pack with version
       run: |
         dotnet pack src/main/DryFish.ILib.csproj \
           --configuration Release \
-          -p:PackageVersion=${{ env.VERSION }} \
-          --output ./artifacts
+          -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
+          --output ./artifacts \
+          --include-symbols
     
-    - name: Push to NuGet
+    - name: Publish to NuGet.org
       run: |
         dotnet nuget push ./artifacts/*.nupkg \
           --api-key ${{ secrets.NUGET_API_KEY }} \
@@ -82,8 +121,6 @@ jobs:
       with:
         files: ./artifacts/*.nupkg
         generate_release_notes: true
-        name: Release v${{ env.VERSION }}
-        tag_name: ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-        token: ${{ secrets.GITHUB_TOKEN }}
+        name: Release v${{ steps.get_version.outputs.VERSION }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
