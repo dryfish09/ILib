@@ -327,10 +327,7 @@ ILib/
 - [x] Error handling
 - [x] Debug mode
 - [x] Configurable timestamps
-- [ ] File logging
-- [ ] JSON configuration
-- [ ] Structured logging
-- [ ] Log rotation
+- [ ] More? Maybe
 
 ## 🤝 Contributing
 
