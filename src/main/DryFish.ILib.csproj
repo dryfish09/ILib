@@ -29,9 +29,9 @@
     <PackageOutputPath>../../nupkg</PackageOutputPath>
   </PropertyGroup>
 
-  <!-- .NET 8+ specific features -->
+  <!-- .NET 6+ specific features -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' Or '$(TargetFramework)' == 'net7.0' Or '$(TargetFramework)' == 'net6.0'">
-    <DefineConstants>$(DefineConstants);NET6_OR_GREATER</DefineConstants>
+    <DefineConstants>$(DefineConstants);NET6_0_OR_GREATER</DefineConstants>
   </PropertyGroup>
 
   <!-- .NET Framework specific -->
