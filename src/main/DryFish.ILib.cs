@@ -558,11 +558,11 @@ public static class ILib
             }
             catch { /* Fall through to UTC */ }
         }
-#elif NETFRAMEWORK
-        // On Windows, try IANA to Windows conversion
-        var windowsId = ConvertToWindowsTimezone(timezoneId);
+#else
+        // For .NET Framework, try IANA to Windows conversion
         try
         {
+            var windowsId = ConvertToWindowsTimezone(timezoneId);
             return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
         }
         catch { /* Fall through to UTC */ }
@@ -575,30 +575,36 @@ public static class ILib
 
     private static ConsoleColor? ParseColor(string color)
     {
-        return color?.ToLower() switch
+        if (string.IsNullOrEmpty(color)) return null;
+        
+        switch (color.ToLower())
         {
-            "black" => ConsoleColor.Black,
-            "darkblue" => ConsoleColor.DarkBlue,
-            "darkgreen" => ConsoleColor.DarkGreen,
-            "darkcyan" => ConsoleColor.DarkCyan,
-            "darkred" => ConsoleColor.DarkRed,
-            "darkmagenta" => ConsoleColor.DarkMagenta,
-            "darkyellow" => ConsoleColor.DarkYellow,
-            "gray" or "grey" => ConsoleColor.Gray,
-            "darkgray" or "darkgrey" => ConsoleColor.DarkGray,
-            "blue" => ConsoleColor.Blue,
-            "green" => ConsoleColor.Green,
-            "cyan" => ConsoleColor.Cyan,
-            "red" => ConsoleColor.Red,
-            "magenta" => ConsoleColor.Magenta,
-            "yellow" => ConsoleColor.Yellow,
-            "white" => ConsoleColor.White,
-            _ => null
-        };
+            case "black": return ConsoleColor.Black;
+            case "darkblue": return ConsoleColor.DarkBlue;
+            case "darkgreen": return ConsoleColor.DarkGreen;
+            case "darkcyan": return ConsoleColor.DarkCyan;
+            case "darkred": return ConsoleColor.DarkRed;
+            case "darkmagenta": return ConsoleColor.DarkMagenta;
+            case "darkyellow": return ConsoleColor.DarkYellow;
+            case "gray":
+            case "grey": return ConsoleColor.Gray;
+            case "darkgray":
+            case "darkgrey": return ConsoleColor.DarkGray;
+            case "blue": return ConsoleColor.Blue;
+            case "green": return ConsoleColor.Green;
+            case "cyan": return ConsoleColor.Cyan;
+            case "red": return ConsoleColor.Red;
+            case "magenta": return ConsoleColor.Magenta;
+            case "yellow": return ConsoleColor.Yellow;
+            case "white": return ConsoleColor.White;
+            default: return null;
+        }
     }
 
     private static ConsoleColor? ParseHexColor(string hex)
     {
+        if (string.IsNullOrEmpty(hex)) return null;
+        
         hex = hex.TrimStart('#');
         
         if (hex.Length == 6)
@@ -644,16 +650,21 @@ public static class ILib
     private static TimeSpan ParseTimezoneOffset(string offset)
     {
         offset = offset.Trim();
-        bool isNegative = offset.StartsWith('-');
-        var numberPart = offset.TrimStart('+', '-');
+        bool isNegative = offset.StartsWith("-");
+        string numberPart = offset;
+        if (numberPart.StartsWith("+") || numberPart.StartsWith("-"))
+        {
+            numberPart = numberPart.Substring(1);
+        }
         
         int hours;
         int minutes = 0;
         
-        // Fix: Use IndexOf instead of Contains for .NET Framework compatibility
-        if (numberPart.IndexOf(':') >= 0)
+        // Check for colon using IndexOf (compatible with all .NET versions)
+        int colonIndex = numberPart.IndexOf(':');
+        if (colonIndex >= 0)
         {
-            var parts = numberPart.Split(':');
+            string[] parts = numberPart.Split(':');
             hours = int.Parse(parts[0]);
             if (parts.Length > 1)
                 minutes = int.Parse(parts[1]);
@@ -682,54 +693,95 @@ public static class ILib
 
     private static string ConvertToWindowsTimezone(string ianaTimeZone)
     {
-        return ianaTimeZone switch
+        switch (ianaTimeZone)
         {
-            "Asia/Ho_Chi_Minh" or "Asia/Saigon" or "Asia/Bangkok" => "SE Asia Standard Time",
-            "Asia/Jakarta" => "SE Asia Standard Time",
-            "Asia/Singapore" => "Singapore Standard Time",
-            "Asia/Tokyo" => "Tokyo Standard Time",
-            "Asia/Shanghai" => "China Standard Time",
-            "Asia/Kolkata" => "India Standard Time",
-            "Asia/Dubai" => "Arabian Standard Time",
-            "America/New_York" => "Eastern Standard Time",
-            "America/Los_Angeles" => "Pacific Standard Time",
-            "America/Chicago" => "Central Standard Time",
-            "America/Denver" => "Mountain Standard Time",
-            "America/Toronto" => "Eastern Standard Time",
-            "America/Vancouver" => "Pacific Standard Time",
-            "Europe/London" => "GMT Standard Time",
-            "Europe/Paris" => "Romance Standard Time",
-            "Europe/Berlin" => "Central Europe Standard Time",
-            "Europe/Moscow" => "Russian Standard Time",
-            "Australia/Sydney" => "AUS Eastern Standard Time",
-            "Australia/Perth" => "W. Australia Standard Time",
-            "Pacific/Auckland" => "New Zealand Standard Time",
-            _ => ianaTimeZone
-        };
+            case "Asia/Ho_Chi_Minh":
+            case "Asia/Saigon":
+            case "Asia/Bangkok":
+                return "SE Asia Standard Time";
+            case "Asia/Jakarta":
+                return "SE Asia Standard Time";
+            case "Asia/Singapore":
+                return "Singapore Standard Time";
+            case "Asia/Tokyo":
+                return "Tokyo Standard Time";
+            case "Asia/Shanghai":
+                return "China Standard Time";
+            case "Asia/Kolkata":
+                return "India Standard Time";
+            case "Asia/Dubai":
+                return "Arabian Standard Time";
+            case "America/New_York":
+                return "Eastern Standard Time";
+            case "America/Los_Angeles":
+                return "Pacific Standard Time";
+            case "America/Chicago":
+                return "Central Standard Time";
+            case "America/Denver":
+                return "Mountain Standard Time";
+            case "America/Toronto":
+                return "Eastern Standard Time";
+            case "America/Vancouver":
+                return "Pacific Standard Time";
+            case "Europe/London":
+                return "GMT Standard Time";
+            case "Europe/Paris":
+                return "Romance Standard Time";
+            case "Europe/Berlin":
+                return "Central Europe Standard Time";
+            case "Europe/Moscow":
+                return "Russian Standard Time";
+            case "Australia/Sydney":
+                return "AUS Eastern Standard Time";
+            case "Australia/Perth":
+                return "W. Australia Standard Time";
+            case "Pacific/Auckland":
+                return "New Zealand Standard Time";
+            default:
+                return ianaTimeZone;
+        }
     }
 
     private static string ConvertToIANATimezone(string windowsTimeZone)
     {
-        return windowsTimeZone switch
+        switch (windowsTimeZone)
         {
-            "SE Asia Standard Time" => "Asia/Bangkok",
-            "Singapore Standard Time" => "Asia/Singapore",
-            "Tokyo Standard Time" => "Asia/Tokyo",
-            "China Standard Time" => "Asia/Shanghai",
-            "India Standard Time" => "Asia/Kolkata",
-            "Arabian Standard Time" => "Asia/Dubai",
-            "Eastern Standard Time" => "America/New_York",
-            "Pacific Standard Time" => "America/Los_Angeles",
-            "Central Standard Time" => "America/Chicago",
-            "Mountain Standard Time" => "America/Denver",
-            "GMT Standard Time" => "Europe/London",
-            "Romance Standard Time" => "Europe/Paris",
-            "Central Europe Standard Time" => "Europe/Berlin",
-            "Russian Standard Time" => "Europe/Moscow",
-            "AUS Eastern Standard Time" => "Australia/Sydney",
-            "W. Australia Standard Time" => "Australia/Perth",
-            "New Zealand Standard Time" => "Pacific/Auckland",
-            _ => windowsTimeZone
-        };
+            case "SE Asia Standard Time":
+                return "Asia/Bangkok";
+            case "Singapore Standard Time":
+                return "Asia/Singapore";
+            case "Tokyo Standard Time":
+                return "Asia/Tokyo";
+            case "China Standard Time":
+                return "Asia/Shanghai";
+            case "India Standard Time":
+                return "Asia/Kolkata";
+            case "Arabian Standard Time":
+                return "Asia/Dubai";
+            case "Eastern Standard Time":
+                return "America/New_York";
+            case "Pacific Standard Time":
+                return "America/Los_Angeles";
+            case "Central Standard Time":
+                return "America/Chicago";
+            case "Mountain Standard Time":
+                return "America/Denver";
+            case "GMT Standard Time":
+                return "Europe/London";
+            case "Romance Standard Time":
+                return "Europe/Paris";
+            case "Central Europe Standard Time":
+                return "Europe/Berlin";
+            case "Russian Standard Time":
+                return "Europe/Moscow";
+            case "AUS Eastern Standard Time":
+                return "Australia/Sydney";
+            case "W. Australia Standard Time":
+                return "Australia/Perth";
+            case "New Zealand Standard Time":
+                return "Pacific/Auckland";
+            default:
+                return windowsTimeZone;
+        }
     }
 }
