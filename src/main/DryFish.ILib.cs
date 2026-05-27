@@ -142,6 +142,7 @@ public static class ILib
     /// <summary>
     /// Sets minimum log level for filtering.
     /// </summary>
+    /// <param name="level">The minimum log level to display.</param>
     public static void ISetMinimumLogLevel(LogLevel level)
     {
         lock (_consoleLock)
@@ -153,6 +154,7 @@ public static class ILib
     /// <summary>
     /// Sets custom log writer (e.g., for file logging).
     /// </summary>
+    /// <param name="writer">The custom log writer implementation.</param>
     public static void ISetLogWriter(ILogWriter writer)
     {
         lock (_consoleLock)
@@ -164,6 +166,7 @@ public static class ILib
     /// <summary>
     /// Displays a notice message (always shown).
     /// </summary>
+    /// <param name="message">The notice message to display.</param>
     public static void INotice(string message)
     {
         if (ShouldLog(LogLevel.Notice))
@@ -173,6 +176,8 @@ public static class ILib
     /// <summary>
     /// Displays a warning message.
     /// </summary>
+    /// <param name="message">The warning message to display.</param>
+    /// <param name="caller">The caller member name (automatically populated).</param>
     public static void IWarn(string message, [CallerMemberName] string caller = "")
     {
         if (ShouldLog(LogLevel.Warning))
@@ -182,6 +187,8 @@ public static class ILib
     /// <summary>
     /// Displays an informational log message.
     /// </summary>
+    /// <param name="message">The info message to display.</param>
+    /// <param name="caller">The caller member name (automatically populated).</param>
     public static void ILogInfo(string message, [CallerMemberName] string caller = "")
     {
         if (ShouldLog(LogLevel.Info))
@@ -191,6 +198,8 @@ public static class ILib
     /// <summary>
     /// Displays an error log message.
     /// </summary>
+    /// <param name="message">The error message to display.</param>
+    /// <param name="caller">The caller member name (automatically populated).</param>
     public static void ILogError(string message, [CallerMemberName] string caller = "")
     {
         if (ShouldLog(LogLevel.Error))
@@ -200,6 +209,8 @@ public static class ILib
     /// <summary>
     /// Displays a completion/success message.
     /// </summary>
+    /// <param name="message">The completion message to display.</param>
+    /// <param name="caller">The caller member name (automatically populated).</param>
     public static void ILogComplete(string message, [CallerMemberName] string caller = "")
     {
         if (ShouldLog(LogLevel.Info))
@@ -209,6 +220,8 @@ public static class ILib
     /// <summary>
     /// Displays a debug log message. Only appears if debug is enabled.
     /// </summary>
+    /// <param name="message">The debug message to display.</param>
+    /// <param name="caller">The caller member name (automatically populated).</param>
     public static void ILogDebug(string message, [CallerMemberName] string caller = "")
     {
         if (_debugEnabled && ShouldLog(LogLevel.Debug))
@@ -218,6 +231,7 @@ public static class ILib
     /// <summary>
     /// Enables or disables debug logging.
     /// </summary>
+    /// <param name="enabled">True to enable debug logging, false to disable.</param>
     public static void ISetDebug(bool enabled)
     {
         lock (_consoleLock)
@@ -301,13 +315,43 @@ public static class ILib
         var result = message;
         foreach (var pattern in _sensitivePatterns)
         {
-            // Simple masking - could be enhanced with regex
+            // Simple masking - compatible with .NET Framework
             if (result.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                result = result.Replace(pattern, "***MASKED***", StringComparison.OrdinalIgnoreCase);
+                // Use case-insensitive replacement for .NET Framework
+                result = ReplaceCaseInsensitive(result, pattern, "***MASKED***");
             }
         }
         return result;
+    }
+
+    /// <summary>
+    /// Replaces all occurrences of a specified string with another string, ignoring case.
+    /// Compatible with .NET Framework.
+    /// </summary>
+    private static string ReplaceCaseInsensitive(string input, string oldValue, string newValue)
+    {
+        if (string.IsNullOrEmpty(input) || string.IsNullOrEmpty(oldValue))
+            return input;
+        
+        var result = new StringBuilder();
+        int lastIndex = 0;
+        
+        while (true)
+        {
+            int index = input.IndexOf(oldValue, lastIndex, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+            {
+                result.Append(input.Substring(lastIndex));
+                break;
+            }
+            
+            result.Append(input.Substring(lastIndex, index - lastIndex));
+            result.Append(newValue);
+            lastIndex = index + oldValue.Length;
+        }
+        
+        return result.ToString();
     }
 
     #endregion
@@ -317,6 +361,7 @@ public static class ILib
     /// <summary>
     /// Pushes current console colors to stack and sets new foreground color.
     /// </summary>
+    /// <param name="color">The color name or hex code to set.</param>
     public static void IPushConsoleColor(string color)
     {
         lock (_consoleLock)
@@ -356,6 +401,8 @@ public static class ILib
     /// <summary>
     /// Sets console color with stack preservation (automatically resets after using block).
     /// </summary>
+    /// <param name="color">The color name or hex code to set.</param>
+    /// <returns>An IDisposable that will restore the original color when disposed.</returns>
     public static IDisposable IUseConsoleColor(string color)
     {
         return new ColorScope(color);
@@ -472,6 +519,7 @@ public static class ILib
     /// <summary>
     /// High-precision delay using spin wait for small delays.
     /// </summary>
+    /// <param name="milliseconds">The number of milliseconds to delay.</param>
     public static void IDelay(int milliseconds)
     {
         if (milliseconds <= 0) return;
@@ -494,6 +542,9 @@ public static class ILib
     /// <summary>
     /// Asynchronously delays with cancellation support.
     /// </summary>
+    /// <param name="milliseconds">The number of milliseconds to delay.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the delay.</param>
+    /// <returns>A task that completes after the specified delay.</returns>
     public static async Task IDelayAsync(int milliseconds, CancellationToken cancellationToken = default)
     {
         if (milliseconds > 0)
@@ -507,6 +558,9 @@ public static class ILib
     /// <summary>
     /// Reads a line securely, optionally masking input.
     /// </summary>
+    /// <param name="prompt">Optional prompt to display.</param>
+    /// <param name="maskChar">Character to use for masking input (default: '*').</param>
+    /// <returns>The input string.</returns>
     public static string IReadLineSecure(string? prompt = null, char maskChar = '*')
     {
         lock (_consoleLock)
@@ -542,6 +596,9 @@ public static class ILib
     /// <summary>
     /// Reads a line with timeout.
     /// </summary>
+    /// <param name="prompt">The prompt to display.</param>
+    /// <param name="timeoutMilliseconds">Timeout in milliseconds.</param>
+    /// <returns>The input string, or empty string if timeout occurs.</returns>
     public static string IReadLineWithTimeout(string prompt, int timeoutMilliseconds)
     {
         lock (_consoleLock)
@@ -566,12 +623,25 @@ public static class ILib
     /// </summary>
     public class LogEntry
     {
+        /// <summary>Gets or sets the log level.</summary>
         public LogLevel Level { get; set; }
+        
+        /// <summary>Gets or sets the log message.</summary>
         public string Message { get; set; } = string.Empty;
+        
+        /// <summary>Gets or sets the console color for this log entry.</summary>
         public ConsoleColor? Color { get; set; }
+        
+        /// <summary>Gets or sets whether to include timestamp.</summary>
         public bool UseTimestamp { get; set; }
+        
+        /// <summary>Gets or sets the caller member name.</summary>
         public string? Caller { get; set; }
+        
+        /// <summary>Gets or sets whether this is an error log (writes to stderr).</summary>
         public bool IsError { get; set; }
+        
+        /// <summary>Gets or sets the timestamp when this log entry was created.</summary>
         public DateTime Timestamp { get; set; }
     }
 
@@ -602,16 +672,26 @@ public static class ILib
 
     #endregion
 
-    #region Existing Methods (Simplified)
+    #region Existing Methods
 
     private static string GetTimestamp()
     {
         return ShowTimestamps ? DateTime.Now.ToString(TimestampFormat) : string.Empty;
     }
 
+    /// <summary>
+    /// Gets or sets whether timestamps are shown in logs.
+    /// </summary>
     public static bool ShowTimestamps { get; set; } = true;
+    
+    /// <summary>
+    /// Gets or sets the timestamp format.
+    /// </summary>
     public static string TimestampFormat { get; set; } = "yyyy-MM-dd HH:mm:ss";
     
+    /// <summary>
+    /// Clears the console screen. Handles IOException gracefully when output is redirected.
+    /// </summary>
     public static void IClearConsole()
     {
         lock (_consoleLock)
@@ -621,6 +701,11 @@ public static class ILib
         }
     }
 
+    /// <summary>
+    /// Reads a line of input from the console with null safety.
+    /// </summary>
+    /// <param name="prompt">Optional prompt to display.</param>
+    /// <returns>The input string, or empty string if null.</returns>
     public static string IReadLine(string? prompt = null)
     {
         lock (_consoleLock)
@@ -631,6 +716,10 @@ public static class ILib
         }
     }
 
+    /// <summary>
+    /// Exits the current application with the specified exit code.
+    /// </summary>
+    /// <param name="exitCode">The exit code to return to the operating system.</param>
     public static void IExit(int exitCode)
     {
         ShutdownLogger();
@@ -645,10 +734,19 @@ public static class ILib
 /// </summary>
 public enum LogLevel
 {
+    /// <summary>Debug level - most detailed information.</summary>
     Debug = 0,
+    
+    /// <summary>Info level - general information messages.</summary>
     Info = 1,
+    
+    /// <summary>Notice level - normal but significant conditions.</summary>
     Notice = 2,
+    
+    /// <summary>Warning level - warning conditions.</summary>
     Warning = 3,
+    
+    /// <summary>Error level - error conditions.</summary>
     Error = 4
 }
 
@@ -657,6 +755,9 @@ public enum LogLevel
 /// </summary>
 public interface ILogWriter
 {
+    /// <summary>Writes a log entry asynchronously.</summary>
+    /// <param name="entry">The log entry to write.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     Task WriteAsync(ILib.LogEntry entry);
 }
 
@@ -668,6 +769,8 @@ public static class ILibExtensions
     /// <summary>
     /// Logs an exception with optional context.
     /// </summary>
+    /// <param name="ex">The exception to log.</param>
+    /// <param name="context">Optional context information.</param>
     public static void ILogError(this Exception ex, string? context = null)
     {
         var message = !string.IsNullOrEmpty(context) ? $"{context}: {ex.Message}" : ex.Message;
