@@ -297,9 +297,9 @@ public static class ILib
     // ========== Console Color Methods ==========
 
     /// <summary>
-    /// Sets the console foreground color using a color name (e.g., "red") or hex code (e.g., "#FF0000").
+    /// Sets the console foreground color using a color name.
     /// </summary>
-    /// <param name="color">Color name (red, green, blue, yellow, cyan, magenta, white, black, gray) or hex code (#RRGGBB).</param>
+    /// <param name="color">Color name (black, darkblue, darkgreen, darkcyan, darkred, darkmagenta, darkyellow, gray, darkgray, blue, green, cyan, red, magenta, yellow, white).</param>
     public static void ISetConsoleColor(string color)
     {
         lock (_consoleLock)
@@ -318,22 +318,7 @@ public static class ILib
             }
             else
             {
-                try
-                {
-                    var hexColor = ParseHexColor(color);
-                    if (hexColor.HasValue)
-                    {
-                        Console.ForegroundColor = hexColor.Value;
-                    }
-                    else
-                    {
-                        IWarn($"Unknown color: {color}. Using default.");
-                    }
-                }
-                catch
-                {
-                    IWarn($"Invalid color format: {color}");
-                }
+                IWarn($"Unknown color: {color}. Using default.");
             }
         }
     }
@@ -341,8 +326,8 @@ public static class ILib
     /// <summary>
     /// Sets both console foreground and background colors.
     /// </summary>
-    /// <param name="foregroundColor">Text color name or hex code.</param>
-    /// <param name="backgroundColor">Background color name or hex code.</param>
+    /// <param name="foregroundColor">Text color name.</param>
+    /// <param name="backgroundColor">Background color name.</param>
     public static void ISetConsoleColor(string foregroundColor, string backgroundColor)
     {
         lock (_consoleLock)
@@ -599,39 +584,6 @@ public static class ILib
             case "white": return ConsoleColor.White;
             default: return null;
         }
-    }
-
-    private static ConsoleColor? ParseHexColor(string hex)
-    {
-        if (string.IsNullOrEmpty(hex)) return null;
-        
-        hex = hex.TrimStart('#');
-        
-        if (hex.Length == 6)
-        {
-            var r = Convert.ToInt32(hex.Substring(0, 2), 16);
-            var g = Convert.ToInt32(hex.Substring(2, 2), 16);
-            var b = Convert.ToInt32(hex.Substring(4, 2), 16);
-            
-            return MapRgbToConsoleColor(r, g, b);
-        }
-        
-        return null;
-    }
-
-    private static ConsoleColor MapRgbToConsoleColor(int r, int g, int b)
-    {
-        if (r > 200 && g < 100 && b < 100) return ConsoleColor.Red;
-        if (r > 200 && g > 100 && b < 100) return ConsoleColor.DarkYellow;
-        if (r > 200 && g > 200 && b < 100) return ConsoleColor.Yellow;
-        if (r < 100 && g > 200 && b < 100) return ConsoleColor.Green;
-        if (r < 100 && g > 200 && b > 200) return ConsoleColor.Cyan;
-        if (r < 100 && g < 100 && b > 200) return ConsoleColor.Blue;
-        if (r > 200 && g < 100 && b > 200) return ConsoleColor.Magenta;
-        if (r > 200 && g > 200 && b > 200) return ConsoleColor.White;
-        if (r < 80 && g < 80 && b < 80) return ConsoleColor.Black;
-        
-        return ConsoleColor.Gray;
     }
 
     private static void SetBackgroundColor(string color)
