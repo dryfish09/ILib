@@ -2,6 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
 
 #if NET6_0_OR_GREATER
 using System.Runtime.InteropServices;
@@ -21,6 +23,34 @@ public static class ILib
     private static ConsoleColor _originalBackgroundColor;
     private static bool _colorsSaved = false;
     private static bool _debugEnabled = false;
+    
+    // Security: Patterns for masking sensitive data
+    private static readonly string[] _sensitivePatterns = new string[]
+    {
+        // Connection strings
+        @"(connectionstring|connstr|connection)[\s]*=[\s]*[""']?[^;""']+",
+        // Passwords
+        @"(password|pwd|passwd|pass)[\s]*=[\s]*[""']?[^;""']+",
+        // Tokens & Keys
+        @"(token|apikey|apisecret|secret|privatekey|accesstoken)[\s]*=[\s]*[""']?[^;""']+",
+        // Credit cards
+        @"\b(?:\d[ -]*?){13,16}\b",
+        // Email addresses
+        @"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+        // IP addresses
+        @"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
+    };
+    
+    private static readonly string[] _pathPatterns = new string[]
+    {
+        // Windows paths with usernames
+        @"[A-Za-z]:\\Users\\[^\\]+\\",
+        // Linux/Unix home paths
+        @"/home/[^/]+/",
+        // Windows System paths
+        @"[A-Za-z]:\\Windows\\[^\\]+\\",
+        @"[A-Za-z]:\\Program Files(?: \(x86\))?\\[^\\]+\\"
+    };
 
     // ========== Basic Logging Methods ==========
 
@@ -76,11 +106,14 @@ public static class ILib
     {
         lock (_consoleLock)
         {
+            // Mask sensitive data before logging
+            var safeMessage = MaskSensitiveData(message);
+            
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Red;
             var timestamp = GetTimestamp();
             var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.Error.WriteLine($"[ERROR]{timestampPart} - {message}");
+            Console.Error.WriteLine($"[ERROR]{timestampPart} - {safeMessage}");
             Console.ForegroundColor = originalColor;
         }
     }
@@ -167,9 +200,12 @@ public static class ILib
         
         lock (_consoleLock)
         {
+            // Mask sensitive data even in debug mode
+            var safeMessage = MaskSensitiveData(message);
+            
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine($"[DEBUG] {DateTime.Now:HH:mm:ss.fff} - {message}");
+            Console.WriteLine($"[DEBUG] {DateTime.Now:HH:mm:ss.fff} - {safeMessage}");
             Console.ForegroundColor = originalColor;
         }
     }
@@ -185,7 +221,7 @@ public static class ILib
             _debugEnabled = enabled;
             if (enabled)
             {
-                Console.WriteLine("[DEBUG] Debug logging enabled");
+                Console.WriteLine("[DEBUG] Debug logging enabled - Stack traces will be masked for security");
             }
         }
     }
@@ -460,6 +496,14 @@ public static class ILib
     /// <param name="ex">The exception to handle.</param>
     /// <param name="exitCode">Optional exit code. If provided, exits application.</param>
     /// <returns>True if handled gracefully.</returns>
+    /// <remarks>
+    /// Security: Stack traces are masked to hide sensitive information like:
+    /// - File paths with usernames
+    /// - Connection strings
+    /// - Passwords, tokens, and API keys
+    /// - Email addresses and IP addresses
+    /// - Credit card numbers
+    /// </remarks>
     public static bool IHandleError(Exception ex, int? exitCode = null)
     {
         // Null check to prevent NullReferenceException
@@ -473,16 +517,21 @@ public static class ILib
         
         lock (_consoleLock)
         {
-            ILogError($"Exception: {ex.Message}");
+            // Mask sensitive data in exception message
+            var safeMessage = MaskSensitiveData(ex.Message);
+            ILogError($"Exception: {safeMessage}");
             
+            // Only log stack trace in debug mode, but still mask sensitive data
             if (_debugEnabled && ex.StackTrace != null)
             {
-                ILogDebug($"Stack trace: {ex.StackTrace}");
+                var safeStackTrace = MaskStackTrace(ex.StackTrace);
+                ILogDebug($"Stack trace (masked): {safeStackTrace}");
             }
             
             if (ex.InnerException != null)
             {
-                IWarn($"Inner exception: {ex.InnerException.Message}");
+                var safeInnerMessage = MaskSensitiveData(ex.InnerException.Message);
+                IWarn($"Inner exception: {safeInnerMessage}");
             }
             
             if (exitCode.HasValue)
@@ -514,7 +563,8 @@ public static class ILib
         
         lock (_consoleLock)
         {
-            ILogError(errorMessage);
+            var safeMessage = MaskSensitiveData(errorMessage);
+            ILogError(safeMessage);
             
             if (exitCode.HasValue)
             {
@@ -530,6 +580,76 @@ public static class ILib
         }
         
         return true;
+    }
+
+    // ========== Security Helper Methods ==========
+
+    /// <summary>
+    /// Masks sensitive data in a message (passwords, tokens, connection strings, etc.)
+    /// </summary>
+    private static string MaskSensitiveData(string message)
+    {
+        if (string.IsNullOrEmpty(message)) return message;
+        
+        var result = message;
+        
+        // Apply all sensitive patterns
+        foreach (var pattern in _sensitivePatterns)
+        {
+            try
+            {
+                result = Regex.Replace(result, pattern, m =>
+                {
+                    // Preserve the key name but mask the value
+                    var match = m.Value;
+                    var equalsIndex = match.IndexOf('=');
+                    if (equalsIndex > 0)
+                    {
+                        var key = match.Substring(0, equalsIndex + 1);
+                        return key + "[MASKED]";
+                    }
+                    return "[MASKED]";
+                }, RegexOptions.IgnoreCase);
+            }
+            catch { /* Skip invalid patterns */ }
+        }
+        
+        return result;
+    }
+    
+    /// <summary>
+    /// Masks sensitive information in stack traces (paths, usernames, etc.)
+    /// </summary>
+    private static string MaskStackTrace(string stackTrace)
+    {
+        if (string.IsNullOrEmpty(stackTrace)) return stackTrace;
+        
+        var result = stackTrace;
+        
+        // Mask file paths with usernames
+        foreach (var pattern in _pathPatterns)
+        {
+            try
+            {
+                result = Regex.Replace(result, pattern, "[MASKED_PATH]");
+            }
+            catch { /* Skip invalid patterns */ }
+        }
+        
+        // Mask Windows drive letters but keep structure
+        result = Regex.Replace(result, @"[A-Za-z]:\\", "[DRIVE]:\\");
+        
+        // Mask method parameters that might contain sensitive data
+        result = Regex.Replace(result, @"\([^)]*\)", match =>
+        {
+            var masked = Regex.Replace(match.Value, 
+                @"(password|token|secret|key|credential)=['""]?[^,)]+", 
+                "$1=[MASKED]", 
+                RegexOptions.IgnoreCase);
+            return masked;
+        });
+        
+        return result;
     }
 
     // ========== Configuration ==========
