@@ -12,7 +12,7 @@ A simple, lightweight C# library for console operations, logging, delays, and ap
 
 - 📝 **Multiple Log Levels** - Notice, Warning, Info, Error, Debug, Complete
 - ⏱️ **Delays** - Both synchronous and asynchronous delay methods
-- 🎨 **Colored Console** - Set colors by name (red, green) or hex code (#FF0000)
+- 🎨 **Colored Console** - Set colors by name (red, green, blue, etc.)
 - ⌨️ **User Input** - ReadLine and ReadKey with null safety
 - 🧹 **Console Control** - Clear console screen with exception handling
 - 🌍 **Timezone Support** - Cross-platform timezone conversion (IANA & Windows)
@@ -105,9 +105,8 @@ ILib.ILogInfo($"Vietnam time: {vnTime}");
 | `ISetConsoleColor(string fg, string bg)` | Set both colors | `ILib.ISetConsoleColor("yellow", "blue");` |
 | `IResetConsoleColor()` | Reset to default | `ILib.IResetConsoleColor();` |
 
-**Supported colors:** `black`, `darkblue`, `darkgreen`, `darkcyan`, `darkred`, `darkmagenta`, `darkyellow`, `gray`, `darkgray`, `blue`, `green`, `cyan`, `red`, `magenta`, `yellow`, `white`
-
-**Hex support:** `#FF0000` (red), `#00FF00` (green), `#0000FF` (blue)
+**Supported colors:** 
+`black`, `darkblue`, `darkgreen`, `darkcyan`, `darkred`, `darkmagenta`, `darkyellow`, `gray`, `grey`, `darkgray`, `darkgrey`, `blue`, `green`, `cyan`, `red`, `magenta`, `yellow`, `white`
 
 ### Timezone Methods
 
@@ -155,10 +154,6 @@ ILib.ILogComplete("Backup completed");
 // By name
 ILib.ISetConsoleColor("cyan");
 ILib.INotice("Cyan text");
-
-// By hex
-ILib.ISetConsoleColor("#FF00FF");
-ILib.INotice("Magenta text");
 
 // Foreground and background
 ILib.ISetConsoleColor("yellow", "blue");
@@ -313,14 +308,15 @@ ILib/
 
 ## 📋 Requirements
 
-- .NET 8.0 or later
+- .NET 6.0 or later
 - Compatible with Windows, Linux, and macOS
+- Supports .NET Framework 4.6.2+
 
 ## 🗺️ Roadmap
 
 - [x] Basic logging (Notice, Warn, Info)
 - [x] Sync/Async delays
-- [x] Console colors (names & hex)
+- [x] Console colors (names)
 - [x] User input methods
 - [x] Clear console screen
 - [x] Cross-platform timezone
@@ -348,7 +344,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ## 🙏 Acknowledgments
 
-- Built with .NET 8.0
+- Built with .NET 6/7/8
 - Tested with xUnit
 - CI/CD with GitHub Actions
 - Cross-platform timezone support
