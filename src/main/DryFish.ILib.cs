@@ -21,13 +21,13 @@ public static class ILib
     private static readonly object _consoleLock = new object();
     private static readonly ConcurrentQueue<LogEntry> _logQueue = new ConcurrentQueue<LogEntry>();
     private static readonly CancellationTokenSource _cts = new CancellationTokenSource();
-    private static Task _backgroundLogger;
+    private static Task? _backgroundLogger;
     private static bool _loggerRunning = false;
     
     private static readonly Stack<ColorState> _colorStack = new Stack<ColorState>();
     private static bool _debugEnabled = false;
     private static LogLevel _minimumLogLevel = LogLevel.Info;
-    private static ILogWriter _customWriter = null;
+    private static ILogWriter? _customWriter = null;
     
     // Color mapping cache for performance
     private static readonly Dictionary<string, ConsoleColor?> _colorNameCache = new Dictionary<string, ConsoleColor?>(StringComparer.OrdinalIgnoreCase);
@@ -278,7 +278,7 @@ public static class ILib
                 
                 var timestamp = entry.UseTimestamp ? GetTimestamp() : "";
                 var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-                var callerPart = entry.Caller != null ? $" [{entry.Caller}]" : "";
+                var callerPart = !string.IsNullOrEmpty(entry.Caller) ? $" [{entry.Caller}]" : "";
                 
                 var logLine = $"[{entry.Level}]{timestampPart}{callerPart} - {entry.Message}";
                 
@@ -507,7 +507,7 @@ public static class ILib
     /// <summary>
     /// Reads a line securely, optionally masking input.
     /// </summary>
-    public static string IReadLineSecure(string prompt = null, char maskChar = '*')
+    public static string IReadLineSecure(string? prompt = null, char maskChar = '*')
     {
         lock (_consoleLock)
         {
@@ -561,13 +561,16 @@ public static class ILib
 
     #region Helper Classes
 
-    private class LogEntry
+    /// <summary>
+    /// Represents a log entry for structured logging.
+    /// </summary>
+    public class LogEntry
     {
         public LogLevel Level { get; set; }
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
         public ConsoleColor? Color { get; set; }
         public bool UseTimestamp { get; set; }
-        public string Caller { get; set; }
+        public string? Caller { get; set; }
         public bool IsError { get; set; }
         public DateTime Timestamp { get; set; }
     }
@@ -618,7 +621,7 @@ public static class ILib
         }
     }
 
-    public static string IReadLine(string prompt = null)
+    public static string IReadLine(string? prompt = null)
     {
         lock (_consoleLock)
         {
@@ -657,12 +660,17 @@ public interface ILogWriter
     Task WriteAsync(ILib.LogEntry entry);
 }
 
-// Extension to make LogEntry accessible (would be internal in real implementation)
+/// <summary>
+/// Extension methods for ILib.
+/// </summary>
 public static class ILibExtensions
 {
-    public static void ILogError(this Exception ex, string context = null)
+    /// <summary>
+    /// Logs an exception with optional context.
+    /// </summary>
+    public static void ILogError(this Exception ex, string? context = null)
     {
-        var message = context != null ? $"{context}: {ex.Message}" : ex.Message;
+        var message = !string.IsNullOrEmpty(context) ? $"{context}: {ex.Message}" : ex.Message;
         ILib.ILogError(message);
         
         if (ex.StackTrace != null)
