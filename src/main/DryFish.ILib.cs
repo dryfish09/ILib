@@ -2,10 +2,12 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Text;
+using System.Runtime.CompilerServices;
 
 #if NET6_0_OR_GREATER
-using System.Runtime.InteropServices;
-#elif NETFRAMEWORK
 using System.Runtime.InteropServices;
 #endif
 
@@ -17,127 +19,205 @@ namespace DryFish.ILib;
 public static class ILib
 {
     private static readonly object _consoleLock = new object();
-    private static ConsoleColor _originalForegroundColor;
-    private static ConsoleColor _originalBackgroundColor;
-    private static bool _colorsSaved = false;
+    private static readonly ConcurrentQueue<LogEntry> _logQueue = new ConcurrentQueue<LogEntry>();
+    private static readonly CancellationTokenSource _cts = new CancellationTokenSource();
+    private static Task _backgroundLogger;
+    private static bool _loggerRunning = false;
+    
+    private static readonly Stack<ColorState> _colorStack = new Stack<ColorState>();
     private static bool _debugEnabled = false;
+    private static LogLevel _minimumLogLevel = LogLevel.Info;
+    private static ILogWriter _customWriter = null;
+    
+    // Color mapping cache for performance
+    private static readonly Dictionary<string, ConsoleColor?> _colorNameCache = new Dictionary<string, ConsoleColor?>(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<int, ConsoleColor> _rgbCache = new Dictionary<int, ConsoleColor>();
+    
+    // Security: Mask sensitive data patterns
+    private static readonly HashSet<string> _sensitivePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "password", "token", "secret", "key", "apikey", "connectionstring"
+    };
 
-    // ========== Basic Logging Methods ==========
+    static ILib()
+    {
+        InitializeColorCache();
+        StartBackgroundLogger();
+        AppDomain.CurrentDomain.ProcessExit += (s, e) => ShutdownLogger();
+        Console.CancelKeyPress += (s, e) => ShutdownLogger();
+    }
+
+    #region Initialization & Shutdown
+
+    private static void InitializeColorCache()
+    {
+        var colorMappings = new (string name, ConsoleColor color)[]
+        {
+            ("black", ConsoleColor.Black),
+            ("darkblue", ConsoleColor.DarkBlue),
+            ("darkgreen", ConsoleColor.DarkGreen),
+            ("darkcyan", ConsoleColor.DarkCyan),
+            ("darkred", ConsoleColor.DarkRed),
+            ("darkmagenta", ConsoleColor.DarkMagenta),
+            ("darkyellow", ConsoleColor.DarkYellow),
+            ("gray", ConsoleColor.Gray),
+            ("grey", ConsoleColor.Gray),
+            ("darkgray", ConsoleColor.DarkGray),
+            ("darkgrey", ConsoleColor.DarkGray),
+            ("blue", ConsoleColor.Blue),
+            ("green", ConsoleColor.Green),
+            ("cyan", ConsoleColor.Cyan),
+            ("red", ConsoleColor.Red),
+            ("magenta", ConsoleColor.Magenta),
+            ("yellow", ConsoleColor.Yellow),
+            ("white", ConsoleColor.White)
+        };
+
+        foreach (var mapping in colorMappings)
+        {
+            _colorNameCache[mapping.name] = mapping.color;
+        }
+    }
+
+    private static void StartBackgroundLogger()
+    {
+        if (_loggerRunning) return;
+        
+        _loggerRunning = true;
+        _backgroundLogger = Task.Run(async () =>
+        {
+            while (!_cts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    while (_logQueue.TryDequeue(out var entry))
+                    {
+                        await WriteLogEntryAsync(entry);
+                    }
+                    await Task.Delay(10, _cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    // Silent fail for background logger
+                    System.Diagnostics.Debug.WriteLine($"Background logger error: {ex.Message}");
+                }
+            }
+            
+            // Flush remaining logs
+            while (_logQueue.TryDequeue(out var entry))
+            {
+                WriteLogEntrySync(entry);
+            }
+        }, _cts.Token);
+    }
+
+    private static void ShutdownLogger()
+    {
+        if (!_loggerRunning) return;
+        
+        _cts.Cancel();
+        try
+        {
+            _backgroundLogger?.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (AggregateException)
+        {
+            // Ignore shutdown exceptions
+        }
+        finally
+        {
+            _cts.Dispose();
+            _loggerRunning = false;
+        }
+    }
+
+    #endregion
+
+    #region Logging Methods with Performance & Security
 
     /// <summary>
-    /// Displays a notice message to the console.
+    /// Sets minimum log level for filtering.
     /// </summary>
-    /// <param name="message">The notice message to display.</param>
+    public static void ISetMinimumLogLevel(LogLevel level)
+    {
+        lock (_consoleLock)
+        {
+            _minimumLogLevel = level;
+        }
+    }
+
+    /// <summary>
+    /// Sets custom log writer (e.g., for file logging).
+    /// </summary>
+    public static void ISetLogWriter(ILogWriter writer)
+    {
+        lock (_consoleLock)
+        {
+            _customWriter = writer;
+        }
+    }
+
+    /// <summary>
+    /// Displays a notice message (always shown).
+    /// </summary>
     public static void INotice(string message)
     {
-        lock (_consoleLock)
-        {
-            Console.WriteLine($"[NOTICE] {message}");
-        }
+        if (ShouldLog(LogLevel.Notice))
+            QueueLog(LogLevel.Notice, message, null, false);
     }
 
     /// <summary>
-    /// Displays a warning message in yellow color.
+    /// Displays a warning message.
     /// </summary>
-    /// <param name="message">The warning message to display.</param>
-    public static void IWarn(string message)
+    public static void IWarn(string message, [CallerMemberName] string caller = "")
     {
-        lock (_consoleLock)
-        {
-            var originalColor = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"[WARN] {message}");
-            Console.ForegroundColor = originalColor;
-        }
+        if (ShouldLog(LogLevel.Warning))
+            QueueLog(LogLevel.Warning, message, ConsoleColor.Yellow, false, caller);
     }
 
     /// <summary>
-    /// Displays an informational log message with timestamp in green color.
+    /// Displays an informational log message.
     /// </summary>
-    /// <param name="message">The info message to display.</param>
-    public static void ILogInfo(string message)
+    public static void ILogInfo(string message, [CallerMemberName] string caller = "")
     {
-        lock (_consoleLock)
-        {
-            var originalColor = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Green;
-            var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[INFO]{timestampPart} - {message}");
-            Console.ForegroundColor = originalColor;
-        }
+        if (ShouldLog(LogLevel.Info))
+            QueueLog(LogLevel.Info, message, ConsoleColor.Green, true, caller);
     }
 
     /// <summary>
-    /// Displays an error log message in red color.
+    /// Displays an error log message.
     /// </summary>
-    /// <param name="message">The error message to display.</param>
-    public static void ILogError(string message)
+    public static void ILogError(string message, [CallerMemberName] string caller = "")
     {
-        lock (_consoleLock)
-        {
-            var originalColor = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Red;
-            var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.Error.WriteLine($"[ERROR]{timestampPart} - {message}");
-            Console.ForegroundColor = originalColor;
-        }
+        if (ShouldLog(LogLevel.Error))
+            QueueLog(LogLevel.Error, message, ConsoleColor.Red, true, caller, true);
     }
 
     /// <summary>
-    /// Displays a completion/success message in green color.
+    /// Displays a completion/success message.
     /// </summary>
-    /// <param name="message">The completion message to display.</param>
-    public static void ILogComplete(string message)
+    public static void ILogComplete(string message, [CallerMemberName] string caller = "")
     {
-        lock (_consoleLock)
-        {
-            var originalColor = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Green;
-            var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[COMPLETE]{timestampPart} - ✓ {message}");
-            Console.ForegroundColor = originalColor;
-        }
+        if (ShouldLog(LogLevel.Info))
+            QueueLog(LogLevel.Info, $"✓ {message}", ConsoleColor.Green, true, caller);
     }
 
     /// <summary>
-    /// Displays a custom log message with a specified prefix and timestamp.
+    /// Displays a debug log message. Only appears if debug is enabled.
     /// </summary>
-    /// <param name="prefix">The custom prefix for the log entry.</param>
-    /// <param name="message">The log message to display.</param>
-    public static void ILog(string prefix, string message)
+    public static void ILogDebug(string message, [CallerMemberName] string caller = "")
     {
-        lock (_consoleLock)
-        {
-            var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[{prefix}]{timestampPart} - {message}");
-        }
-    }
-
-    /// <summary>
-    /// Displays a debug log message in cyan color. Only appears if debug is enabled.
-    /// </summary>
-    /// <param name="message">The debug message to display.</param>
-    public static void ILogDebug(string message)
-    {
-        if (!_debugEnabled) return;
-        
-        lock (_consoleLock)
-        {
-            var originalColor = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine($"[DEBUG] {DateTime.Now:HH:mm:ss.fff} - {message}");
-            Console.ForegroundColor = originalColor;
-        }
+        if (_debugEnabled && ShouldLog(LogLevel.Debug))
+            QueueLog(LogLevel.Debug, message, ConsoleColor.Cyan, true, caller);
     }
 
     /// <summary>
     /// Enables or disables debug logging.
     /// </summary>
-    /// <param name="enabled">True to enable debug logging, false to disable.</param>
     public static void ISetDebug(bool enabled)
     {
         lock (_consoleLock)
@@ -145,224 +225,126 @@ public static class ILib
             _debugEnabled = enabled;
             if (enabled)
             {
-                Console.WriteLine("[DEBUG] Debug logging enabled");
+                ILogDebug("Debug logging enabled");
             }
         }
     }
 
-    // ========== Delay Methods ==========
-
-    /// <summary>
-    /// Pauses the current thread for the specified number of milliseconds.
-    /// </summary>
-    /// <param name="milliseconds">The number of milliseconds to delay. Positive values only.</param>
-    public static void IDelay(int milliseconds)
+    private static bool ShouldLog(LogLevel level)
     {
-        if (milliseconds > 0)
-            Thread.Sleep(milliseconds);
+        return level >= _minimumLogLevel;
     }
 
-    /// <summary>
-    /// Asynchronously delays for the specified number of milliseconds.
-    /// </summary>
-    /// <param name="milliseconds">The number of milliseconds to delay. Positive values only.</param>
-    /// <returns>A task that completes after the specified delay.</returns>
-    public static async Task IDelayAsync(int milliseconds)
+    private static void QueueLog(LogLevel level, string message, ConsoleColor? color, bool useTimestamp, 
+        string caller = "", bool isError = false)
     {
-        if (milliseconds > 0)
-            await Task.Delay(milliseconds);
-    }
-
-    // ========== Exit Method ==========
-
-    /// <summary>
-    /// Exits the current application with the specified exit code.
-    /// </summary>
-    /// <param name="exitCode">The exit code to return to the operating system.</param>
-    public static void IExit(int exitCode)
-    {
-        Environment.Exit(exitCode);
-    }
-
-    // ========== Input Methods ==========
-
-    /// <summary>
-    /// Reads a line of input from the console with null safety.
-    /// </summary>
-    /// <returns>The input string, or empty string if null.</returns>
-    public static string IReadLine()
-    {
-        lock (_consoleLock)
+        // SECURITY: Mask sensitive data
+        message = MaskSensitiveData(message);
+        
+        var entry = new LogEntry
         {
-            var input = Console.ReadLine();
-            return input ?? string.Empty;
+            Level = level,
+            Message = message,
+            Color = color,
+            UseTimestamp = useTimestamp,
+            Caller = string.IsNullOrEmpty(caller) ? null : caller,
+            IsError = isError,
+            Timestamp = DateTime.UtcNow
+        };
+        
+        _logQueue.Enqueue(entry);
+    }
+
+    private static async Task WriteLogEntryAsync(LogEntry entry)
+    {
+        if (_customWriter != null)
+        {
+            await _customWriter.WriteAsync(entry);
         }
+        
+        WriteLogEntrySync(entry);
     }
 
-    /// <summary>
-    /// Reads a line of input with a custom prompt.
-    /// </summary>
-    /// <param name="prompt">The prompt to display before reading input.</param>
-    /// <returns>The input string, or empty string if null.</returns>
-    public static string IReadLine(string prompt)
+    private static void WriteLogEntrySync(LogEntry entry)
     {
         lock (_consoleLock)
         {
-            Console.Write(prompt);
-            var input = Console.ReadLine();
-            return input ?? string.Empty;
-        }
-    }
-
-    /// <summary>
-    /// Reads a key press from the console.
-    /// </summary>
-    /// <returns>The key info, or null if not available.</returns>
-    public static ConsoleKeyInfo? IReadKey()
-    {
-        lock (_consoleLock)
-        {
+            var originalColor = Console.ForegroundColor;
+            
             try
             {
-                return Console.ReadKey(true);
+                if (entry.Color.HasValue)
+                    Console.ForegroundColor = entry.Color.Value;
+                
+                var timestamp = entry.UseTimestamp ? GetTimestamp() : "";
+                var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
+                var callerPart = entry.Caller != null ? $" [{entry.Caller}]" : "";
+                
+                var logLine = $"[{entry.Level}]{timestampPart}{callerPart} - {entry.Message}";
+                
+                if (entry.IsError)
+                    Console.Error.WriteLine(logLine);
+                else
+                    Console.WriteLine(logLine);
             }
-            catch
+            finally
             {
-                return null;
+                Console.ForegroundColor = originalColor;
             }
         }
     }
 
-    /// <summary>
-    /// Reads a key press with optional display.
-    /// </summary>
-    /// <param name="intercept">Whether to intercept the key (not display it).</param>
-    /// <returns>The key info, or null if not available.</returns>
-    public static ConsoleKeyInfo? IReadKey(bool intercept)
+    private static string MaskSensitiveData(string message)
     {
-        lock (_consoleLock)
+        if (string.IsNullOrEmpty(message)) return message;
+        
+        var result = message;
+        foreach (var pattern in _sensitivePatterns)
         {
-            try
+            // Simple masking - could be enhanced with regex
+            if (result.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return Console.ReadKey(intercept);
-            }
-            catch
-            {
-                return null;
+                result = result.Replace(pattern, "***MASKED***", StringComparison.OrdinalIgnoreCase);
             }
         }
+        return result;
     }
 
+    #endregion
+
+    #region Improved Color Management
+
     /// <summary>
-    /// Reads a key press with a custom prompt.
+    /// Pushes current console colors to stack and sets new foreground color.
     /// </summary>
-    /// <param name="prompt">The prompt to display.</param>
-    /// <returns>The key info, or null if not available.</returns>
-    public static ConsoleKeyInfo? IReadKey(string prompt)
+    public static void IPushConsoleColor(string color)
     {
         lock (_consoleLock)
         {
-            Console.Write(prompt);
-            try
+            _colorStack.Push(new ColorState
             {
-                return Console.ReadKey(true);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-    }
-
-    // ========== Console Methods ==========
-
-    /// <summary>
-    /// Clears the console screen. Handles IOException gracefully when output is redirected.
-    /// </summary>
-    public static void IClearConsole()
-    {
-        lock (_consoleLock)
-        {
-            try
-            {
-                Console.Clear();
-            }
-            catch (IOException)
-            {
-                // Safe to ignore if console output is redirected (e.g., in CI/CD pipelines)
-            }
-        }
-    }
-
-    // ========== Console Color Methods ==========
-
-    /// <summary>
-    /// Sets the console foreground color using a color name (e.g., "red") or hex code (e.g., "#FF0000").
-    /// </summary>
-    /// <param name="color">Color name (red, green, blue, yellow, cyan, magenta, white, black, gray) or hex code (#RRGGBB).</param>
-    public static void ISetConsoleColor(string color)
-    {
-        lock (_consoleLock)
-        {
-            if (!_colorsSaved)
-            {
-                _originalForegroundColor = Console.ForegroundColor;
-                _originalBackgroundColor = Console.BackgroundColor;
-                _colorsSaved = true;
-            }
-
-            var consoleColor = ParseColor(color);
+                Foreground = Console.ForegroundColor,
+                Background = Console.BackgroundColor
+            });
+            
+            var consoleColor = ParseColorFast(color);
             if (consoleColor.HasValue)
-            {
                 Console.ForegroundColor = consoleColor.Value;
-            }
-            else
-            {
-                try
-                {
-                    var hexColor = ParseHexColor(color);
-                    if (hexColor.HasValue)
-                    {
-                        Console.ForegroundColor = hexColor.Value;
-                    }
-                    else
-                    {
-                        IWarn($"Unknown color: {color}. Using default.");
-                    }
-                }
-                catch
-                {
-                    IWarn($"Invalid color format: {color}");
-                }
-            }
         }
     }
 
     /// <summary>
-    /// Sets both console foreground and background colors.
+    /// Pops and restores previous console colors from stack.
     /// </summary>
-    /// <param name="foregroundColor">Text color name or hex code.</param>
-    /// <param name="backgroundColor">Background color name or hex code.</param>
-    public static void ISetConsoleColor(string foregroundColor, string backgroundColor)
+    public static void IPopConsoleColor()
     {
         lock (_consoleLock)
         {
-            ISetConsoleColor(foregroundColor);
-            SetBackgroundColor(backgroundColor);
-        }
-    }
-
-    /// <summary>
-    /// Resets console colors to their original/default values.
-    /// </summary>
-    public static void IResetConsoleColor()
-    {
-        lock (_consoleLock)
-        {
-            if (_colorsSaved)
+            if (_colorStack.Count > 0)
             {
-                Console.ForegroundColor = _originalForegroundColor;
-                Console.BackgroundColor = _originalBackgroundColor;
+                var previous = _colorStack.Pop();
+                Console.ForegroundColor = previous.Foreground;
+                Console.BackgroundColor = previous.Background;
             }
             else
             {
@@ -371,417 +353,319 @@ public static class ILib
         }
     }
 
-    // ========== Timezone Methods ==========
-
     /// <summary>
-    /// Gets the current UTC time adjusted for the specified timezone offset.
+    /// Sets console color with stack preservation (automatically resets after using block).
     /// </summary>
-    /// <param name="utcOffset">Timezone offset (e.g., "+7", "-5", "+0530", "+7:30").</param>
-    /// <returns>Formatted datetime string in "yyyy-MM-dd HH:mm:ss" format.</returns>
-    public static string IGetTimeUtc(string utcOffset)
+    public static IDisposable IUseConsoleColor(string color)
     {
-        var offset = ParseTimezoneOffset(utcOffset);
-        var utcNow = DateTime.UtcNow;
-        var localTime = utcNow.Add(offset);
-        
-        return localTime.ToString("yyyy-MM-dd HH:mm:ss");
+        return new ColorScope(color);
     }
 
     /// <summary>
-    /// Gets the current UTC time adjusted for the specified timezone offset with custom format.
+    /// Resets console colors to system default.
     /// </summary>
-    /// <param name="utcOffset">Timezone offset (e.g., "+7", "-5").</param>
-    /// <param name="format">Custom datetime format string.</param>
-    /// <returns>Formatted datetime string.</returns>
-    public static string IGetTimeUtc(string utcOffset, string format)
+    public static void IResetConsoleColor()
     {
-        var offset = ParseTimezoneOffset(utcOffset);
-        var utcNow = DateTime.UtcNow;
-        var localTime = utcNow.Add(offset);
-        
-        return localTime.ToString(format);
-    }
-
-    /// <summary>
-    /// Gets the current time for a specific timezone (cross-platform compatible).
-    /// </summary>
-    /// <param name="timezoneId">IANA timezone ID (e.g., "Asia/Ho_Chi_Minh", "America/New_York").</param>
-    /// <returns>Formatted datetime string in "yyyy-MM-dd HH:mm:ss" format.</returns>
-    public static string IGetTimeZone(string timezoneId)
-    {
-        var tz = GetTimeZoneInfo(timezoneId);
-        var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-        return localTime.ToString("yyyy-MM-dd HH:mm:ss");
-    }
-
-    /// <summary>
-    /// Gets the current time for a specific timezone with custom format.
-    /// </summary>
-    /// <param name="timezoneId">IANA timezone ID.</param>
-    /// <param name="format">Custom datetime format.</param>
-    /// <returns>Formatted datetime string.</returns>
-    public static string IGetTimeZone(string timezoneId, string format)
-    {
-        var tz = GetTimeZoneInfo(timezoneId);
-        var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-        return localTime.ToString(format);
-    }
-
-    // ========== Error Handling Methods ==========
-
-    /// <summary>
-    /// Handles an exception with optional logging and graceful exit.
-    /// </summary>
-    /// <param name="ex">The exception to handle.</param>
-    /// <param name="exitCode">Optional exit code. If provided, exits application.</param>
-    /// <returns>True if handled gracefully.</returns>
-    public static bool IHandleError(Exception ex, int? exitCode = null)
-    {
-        // Null check to prevent NullReferenceException
-        if (ex == null)
-        {
-            return IHandleError("Null exception encountered.", exitCode);
-        }
-        
-        bool shouldExit = false;
-        int exitCodeValue = 0;
-        
         lock (_consoleLock)
         {
-            ILogError($"Exception: {ex.Message}");
-            
-            if (_debugEnabled && ex.StackTrace != null)
-            {
-                ILogDebug($"Stack trace: {ex.StackTrace}");
-            }
-            
-            if (ex.InnerException != null)
-            {
-                IWarn($"Inner exception: {ex.InnerException.Message}");
-            }
-            
-            if (exitCode.HasValue)
-            {
-                shouldExit = true;
-                exitCodeValue = exitCode.Value;
-                IWarn($"Exiting with code {exitCodeValue}");
-            }
+            _colorStack.Clear();
+            Console.ResetColor();
         }
+    }
+
+    private static ConsoleColor? ParseColorFast(string color)
+    {
+        if (string.IsNullOrEmpty(color)) return null;
         
-        if (shouldExit)
+        // Check cache first for O(1) lookup
+        if (_colorNameCache.TryGetValue(color, out var cachedColor))
+            return cachedColor;
+        
+        // Try hex color
+        var hexColor = ParseHexColorFast(color);
+        if (hexColor.HasValue)
+            return hexColor.Value;
+        
+        IWarn($"Unknown color: {color}. Using default.");
+        return null;
+    }
+
+    private static ConsoleColor? ParseHexColorFast(string hex)
+    {
+        if (string.IsNullOrEmpty(hex)) return null;
+        
+        hex = hex.TrimStart('#');
+        if (hex.Length != 6) return null;
+        
+        // Use cache key for RGB combinations
+        if (int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out int rgbValue))
         {
-            IExit(exitCodeValue);
+            if (_rgbCache.TryGetValue(rgbValue, out var cached))
+                return cached;
+            
+            var r = (rgbValue >> 16) & 0xFF;
+            var g = (rgbValue >> 8) & 0xFF;
+            var b = rgbValue & 0xFF;
+            
+            var result = MapRgbToConsoleColorFast(r, g, b);
+            _rgbCache[rgbValue] = result;
+            return result;
         }
         
-        return true;
+        return null;
+    }
+
+    private static ConsoleColor MapRgbToConsoleColorFast(int r, int g, int b)
+    {
+        // Optimized mapping with pre-calculated thresholds
+        int brightness = (r + g + b) / 3;
+        
+        if (brightness < 80) return ConsoleColor.Black;
+        if (brightness > 200) return ConsoleColor.White;
+        
+        // Find closest color using color distance
+        var colors = new (ConsoleColor color, int r, int g, int b)[]
+        {
+            (ConsoleColor.Black, 0, 0, 0),
+            (ConsoleColor.DarkBlue, 0, 0, 128),
+            (ConsoleColor.DarkGreen, 0, 128, 0),
+            (ConsoleColor.DarkCyan, 0, 128, 128),
+            (ConsoleColor.DarkRed, 128, 0, 0),
+            (ConsoleColor.DarkMagenta, 128, 0, 128),
+            (ConsoleColor.DarkYellow, 128, 128, 0),
+            (ConsoleColor.Gray, 192, 192, 192),
+            (ConsoleColor.Blue, 0, 0, 255),
+            (ConsoleColor.Green, 0, 255, 0),
+            (ConsoleColor.Cyan, 0, 255, 255),
+            (ConsoleColor.Red, 255, 0, 0),
+            (ConsoleColor.Magenta, 255, 0, 255),
+            (ConsoleColor.Yellow, 255, 255, 0),
+            (ConsoleColor.White, 255, 255, 255)
+        };
+        
+        var closest = ConsoleColor.Gray;
+        int minDistance = int.MaxValue;
+        
+        foreach (var color in colors)
+        {
+            int dr = r - color.r;
+            int dg = g - color.g;
+            int db = b - color.b;
+            int distance = dr * dr + dg * dg + db * db;
+            
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+                closest = color.color;
+            }
+        }
+        
+        return closest;
+    }
+
+    #endregion
+
+    #region Optimized Delay Methods
+
+    private static readonly System.Diagnostics.Stopwatch _delayStopwatch = new System.Diagnostics.Stopwatch();
+
+    /// <summary>
+    /// High-precision delay using spin wait for small delays.
+    /// </summary>
+    public static void IDelay(int milliseconds)
+    {
+        if (milliseconds <= 0) return;
+        
+        if (milliseconds < 50)
+        {
+            // Use spin wait for short delays (more precise)
+            var start = Environment.TickCount;
+            while (Environment.TickCount - start < milliseconds)
+            {
+                Thread.SpinWait(10);
+            }
+        }
+        else
+        {
+            Thread.Sleep(milliseconds);
+        }
     }
 
     /// <summary>
-    /// Handles an error message without exception.
+    /// Asynchronously delays with cancellation support.
     /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="exitCode">Optional exit code.</param>
-    /// <returns>True if handled.</returns>
-    public static bool IHandleError(string errorMessage, int? exitCode = null)
+    public static async Task IDelayAsync(int milliseconds, CancellationToken cancellationToken = default)
     {
-        bool shouldExit = false;
-        int exitCodeValue = 0;
-        
+        if (milliseconds > 0)
+            await Task.Delay(milliseconds, cancellationToken);
+    }
+
+    #endregion
+
+    #region Secure Input Methods
+
+    /// <summary>
+    /// Reads a line securely, optionally masking input.
+    /// </summary>
+    public static string IReadLineSecure(string prompt = null, char maskChar = '*')
+    {
         lock (_consoleLock)
         {
-            ILogError(errorMessage);
+            if (!string.IsNullOrEmpty(prompt))
+                Console.Write(prompt);
             
-            if (exitCode.HasValue)
+            var password = new StringBuilder();
+            ConsoleKeyInfo key;
+            
+            do
             {
-                shouldExit = true;
-                exitCodeValue = exitCode.Value;
-                IWarn($"Exiting with code {exitCodeValue}");
+                key = Console.ReadKey(true);
+                
+                if (key.Key == ConsoleKey.Backspace && password.Length > 0)
+                {
+                    password.Length--;
+                    Console.Write("\b \b");
+                }
+                else if (!char.IsControl(key.KeyChar))
+                {
+                    password.Append(key.KeyChar);
+                    Console.Write(maskChar);
+                }
             }
+            while (key.Key != ConsoleKey.Enter);
+            
+            Console.WriteLine();
+            return password.ToString();
         }
-        
-        if (shouldExit)
-        {
-            IExit(exitCodeValue);
-        }
-        
-        return true;
     }
 
-    // ========== Configuration ==========
-
     /// <summary>
-    /// Gets or sets whether timestamps are shown in logs.
+    /// Reads a line with timeout.
     /// </summary>
-    public static bool ShowTimestamps { get; set; } = true;
+    public static string IReadLineWithTimeout(string prompt, int timeoutMilliseconds)
+    {
+        lock (_consoleLock)
+        {
+            Console.Write(prompt);
+            var task = Task.Run(() => Console.ReadLine());
+            
+            if (task.Wait(timeoutMilliseconds))
+                return task.Result ?? string.Empty;
+            
+            Console.WriteLine("\nInput timeout.");
+            return string.Empty;
+        }
+    }
 
-    /// <summary>
-    /// Gets or sets the timestamp format.
-    /// </summary>
-    public static string TimestampFormat { get; set; } = "yyyy-MM-dd HH:mm:ss";
+    #endregion
+
+    #region Helper Classes
+
+    private class LogEntry
+    {
+        public LogLevel Level { get; set; }
+        public string Message { get; set; }
+        public ConsoleColor? Color { get; set; }
+        public bool UseTimestamp { get; set; }
+        public string Caller { get; set; }
+        public bool IsError { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    private struct ColorState
+    {
+        public ConsoleColor Foreground;
+        public ConsoleColor Background;
+    }
+
+    private class ColorScope : IDisposable
+    {
+        private bool _disposed;
+
+        public ColorScope(string color)
+        {
+            IPushConsoleColor(color);
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                IPopConsoleColor();
+                _disposed = true;
+            }
+        }
+    }
+
+    #endregion
+
+    #region Existing Methods (Simplified)
 
     private static string GetTimestamp()
     {
         return ShowTimestamps ? DateTime.Now.ToString(TimestampFormat) : string.Empty;
     }
 
-    // ========== Private Helper Methods ==========
-
-    private static TimeZoneInfo GetTimeZoneInfo(string timezoneId)
+    public static bool ShowTimestamps { get; set; } = true;
+    public static string TimestampFormat { get; set; } = "yyyy-MM-dd HH:mm:ss";
+    
+    public static void IClearConsole()
     {
-        // Try direct lookup first
-        try
+        lock (_consoleLock)
         {
-            return TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
-        }
-        catch { /* Continue to next method */ }
-
-#if NET6_0_OR_GREATER
-        // On Windows, try IANA to Windows conversion
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            var windowsId = ConvertToWindowsTimezone(timezoneId);
-            try
-            {
-                return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
-            }
-            catch { /* Fall through to UTC */ }
-        }
-
-        // On Linux/Mac, try Windows to IANA conversion
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || 
-            RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            var ianaId = ConvertToIANATimezone(timezoneId);
-            try
-            {
-                return TimeZoneInfo.FindSystemTimeZoneById(ianaId);
-            }
-            catch { /* Fall through to UTC */ }
-        }
-#else
-        // For .NET Framework, try IANA to Windows conversion
-        try
-        {
-            var windowsId = ConvertToWindowsTimezone(timezoneId);
-            return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
-        }
-        catch { /* Fall through to UTC */ }
-#endif
-
-        // Fallback to UTC
-        IWarn($"Cannot find timezone '{timezoneId}', using UTC");
-        return TimeZoneInfo.Utc;
-    }
-
-    private static ConsoleColor? ParseColor(string color)
-    {
-        if (string.IsNullOrEmpty(color)) return null;
-        
-        switch (color.ToLower())
-        {
-            case "black": return ConsoleColor.Black;
-            case "darkblue": return ConsoleColor.DarkBlue;
-            case "darkgreen": return ConsoleColor.DarkGreen;
-            case "darkcyan": return ConsoleColor.DarkCyan;
-            case "darkred": return ConsoleColor.DarkRed;
-            case "darkmagenta": return ConsoleColor.DarkMagenta;
-            case "darkyellow": return ConsoleColor.DarkYellow;
-            case "gray":
-            case "grey": return ConsoleColor.Gray;
-            case "darkgray":
-            case "darkgrey": return ConsoleColor.DarkGray;
-            case "blue": return ConsoleColor.Blue;
-            case "green": return ConsoleColor.Green;
-            case "cyan": return ConsoleColor.Cyan;
-            case "red": return ConsoleColor.Red;
-            case "magenta": return ConsoleColor.Magenta;
-            case "yellow": return ConsoleColor.Yellow;
-            case "white": return ConsoleColor.White;
-            default: return null;
+            try { Console.Clear(); }
+            catch (IOException) { }
         }
     }
 
-    private static ConsoleColor? ParseHexColor(string hex)
+    public static string IReadLine(string prompt = null)
     {
-        if (string.IsNullOrEmpty(hex)) return null;
-        
-        hex = hex.TrimStart('#');
-        
-        if (hex.Length == 6)
+        lock (_consoleLock)
         {
-            var r = Convert.ToInt32(hex.Substring(0, 2), 16);
-            var g = Convert.ToInt32(hex.Substring(2, 2), 16);
-            var b = Convert.ToInt32(hex.Substring(4, 2), 16);
-            
-            return MapRgbToConsoleColor(r, g, b);
-        }
-        
-        return null;
-    }
-
-    private static ConsoleColor MapRgbToConsoleColor(int r, int g, int b)
-    {
-        if (r > 200 && g < 100 && b < 100) return ConsoleColor.Red;
-        if (r > 200 && g > 100 && b < 100) return ConsoleColor.DarkYellow;
-        if (r > 200 && g > 200 && b < 100) return ConsoleColor.Yellow;
-        if (r < 100 && g > 200 && b < 100) return ConsoleColor.Green;
-        if (r < 100 && g > 200 && b > 200) return ConsoleColor.Cyan;
-        if (r < 100 && g < 100 && b > 200) return ConsoleColor.Blue;
-        if (r > 200 && g < 100 && b > 200) return ConsoleColor.Magenta;
-        if (r > 200 && g > 200 && b > 200) return ConsoleColor.White;
-        if (r < 80 && g < 80 && b < 80) return ConsoleColor.Black;
-        
-        return ConsoleColor.Gray;
-    }
-
-    private static void SetBackgroundColor(string color)
-    {
-        var consoleColor = ParseColor(color);
-        if (consoleColor.HasValue)
-        {
-            Console.BackgroundColor = consoleColor.Value;
-        }
-        else
-        {
-            IWarn($"Unknown background color: {color}");
+            if (!string.IsNullOrEmpty(prompt))
+                Console.Write(prompt);
+            return Console.ReadLine() ?? string.Empty;
         }
     }
 
-    private static TimeSpan ParseTimezoneOffset(string offset)
+    public static void IExit(int exitCode)
     {
-        offset = offset.Trim();
-        bool isNegative = offset.StartsWith("-");
-        string numberPart = offset;
-        if (numberPart.StartsWith("+") || numberPart.StartsWith("-"))
-        {
-            numberPart = numberPart.Substring(1);
-        }
-        
-        int hours;
-        int minutes = 0;
-        
-        // Check for colon using IndexOf (compatible with all .NET versions)
-        int colonIndex = numberPart.IndexOf(':');
-        if (colonIndex >= 0)
-        {
-            string[] parts = numberPart.Split(':');
-            hours = int.Parse(parts[0]);
-            if (parts.Length > 1)
-                minutes = int.Parse(parts[1]);
-        }
-        else if (numberPart.Length >= 3 && numberPart.Length <= 4)
-        {
-            // Format: "0730" or "530" (HHMM or HMM)
-            hours = int.Parse(numberPart.Substring(0, numberPart.Length - 2));
-            minutes = int.Parse(numberPart.Substring(numberPart.Length - 2));
-        }
-        else
-        {
-            // Format: "7", "07", "14"
-            hours = int.Parse(numberPart);
-        }
-        
-        if (minutes < 0 || minutes >= 60)
-        {
-            IWarn($"Invalid minutes in offset: {minutes}. Using 0.");
-            minutes = 0;
-        }
-        
-        var timeSpan = new TimeSpan(hours, minutes, 0);
-        return isNegative ? -timeSpan : timeSpan;
+        ShutdownLogger();
+        Environment.Exit(exitCode);
     }
 
-    private static string ConvertToWindowsTimezone(string ianaTimeZone)
-    {
-        switch (ianaTimeZone)
-        {
-            case "Asia/Ho_Chi_Minh":
-            case "Asia/Saigon":
-            case "Asia/Bangkok":
-                return "SE Asia Standard Time";
-            case "Asia/Jakarta":
-                return "SE Asia Standard Time";
-            case "Asia/Singapore":
-                return "Singapore Standard Time";
-            case "Asia/Tokyo":
-                return "Tokyo Standard Time";
-            case "Asia/Shanghai":
-                return "China Standard Time";
-            case "Asia/Kolkata":
-                return "India Standard Time";
-            case "Asia/Dubai":
-                return "Arabian Standard Time";
-            case "America/New_York":
-                return "Eastern Standard Time";
-            case "America/Los_Angeles":
-                return "Pacific Standard Time";
-            case "America/Chicago":
-                return "Central Standard Time";
-            case "America/Denver":
-                return "Mountain Standard Time";
-            case "America/Toronto":
-                return "Eastern Standard Time";
-            case "America/Vancouver":
-                return "Pacific Standard Time";
-            case "Europe/London":
-                return "GMT Standard Time";
-            case "Europe/Paris":
-                return "Romance Standard Time";
-            case "Europe/Berlin":
-                return "Central Europe Standard Time";
-            case "Europe/Moscow":
-                return "Russian Standard Time";
-            case "Australia/Sydney":
-                return "AUS Eastern Standard Time";
-            case "Australia/Perth":
-                return "W. Australia Standard Time";
-            case "Pacific/Auckland":
-                return "New Zealand Standard Time";
-            default:
-                return ianaTimeZone;
-        }
-    }
+    #endregion
+}
 
-    private static string ConvertToIANATimezone(string windowsTimeZone)
+/// <summary>
+/// Log level enumeration for filtering.
+/// </summary>
+public enum LogLevel
+{
+    Debug = 0,
+    Info = 1,
+    Notice = 2,
+    Warning = 3,
+    Error = 4
+}
+
+/// <summary>
+/// Interface for custom log writers.
+/// </summary>
+public interface ILogWriter
+{
+    Task WriteAsync(ILib.LogEntry entry);
+}
+
+// Extension to make LogEntry accessible (would be internal in real implementation)
+public static class ILibExtensions
+{
+    public static void ILogError(this Exception ex, string context = null)
     {
-        switch (windowsTimeZone)
-        {
-            case "SE Asia Standard Time":
-                return "Asia/Bangkok";
-            case "Singapore Standard Time":
-                return "Asia/Singapore";
-            case "Tokyo Standard Time":
-                return "Asia/Tokyo";
-            case "China Standard Time":
-                return "Asia/Shanghai";
-            case "India Standard Time":
-                return "Asia/Kolkata";
-            case "Arabian Standard Time":
-                return "Asia/Dubai";
-            case "Eastern Standard Time":
-                return "America/New_York";
-            case "Pacific Standard Time":
-                return "America/Los_Angeles";
-            case "Central Standard Time":
-                return "America/Chicago";
-            case "Mountain Standard Time":
-                return "America/Denver";
-            case "GMT Standard Time":
-                return "Europe/London";
-            case "Romance Standard Time":
-                return "Europe/Paris";
-            case "Central Europe Standard Time":
-                return "Europe/Berlin";
-            case "Russian Standard Time":
-                return "Europe/Moscow";
-            case "AUS Eastern Standard Time":
-                return "Australia/Sydney";
-            case "W. Australia Standard Time":
-                return "Australia/Perth";
-            case "New Zealand Standard Time":
-                return "Pacific/Auckland";
-            default:
-                return windowsTimeZone;
-        }
+        var message = context != null ? $"{context}: {ex.Message}" : ex.Message;
+        ILib.ILogError(message);
+        
+        if (ex.StackTrace != null)
+            ILib.ILogDebug($"Stack trace: {ex.StackTrace}");
     }
 }
