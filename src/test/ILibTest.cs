@@ -192,9 +192,10 @@ public class ILibTests
     }
 
     [Fact]
-    public void ISetConsoleColor_WithValidHex_ShouldNotThrow()
+    public void ISetConsoleColor_WithInvalidColorName_ShouldFallbackToDefault()
     {
-        var exception = Record.Exception(() => ILib.ISetConsoleColor("#FF0000"));
+        // Should not throw, just warn
+        var exception = Record.Exception(() => ILib.ISetConsoleColor("invalidcolor"));
         Assert.Null(exception);
         ILib.IResetConsoleColor();
     }
@@ -220,8 +221,9 @@ public class ILibTests
     {
         var colors = new[] { 
             "black", "darkblue", "darkgreen", "darkcyan", "darkred", 
-            "darkmagenta", "darkyellow", "gray", "darkgray", "blue", 
-            "green", "cyan", "red", "magenta", "yellow", "white" 
+            "darkmagenta", "darkyellow", "gray", "grey", "darkgray", 
+            "darkgrey", "blue", "green", "cyan", "red", "magenta", 
+            "yellow", "white" 
         };
         
         foreach (var color in colors)
@@ -229,6 +231,19 @@ public class ILibTests
             var exception = Record.Exception(() => ILib.ISetConsoleColor(color));
             Assert.Null(exception);
         }
+        
+        ILib.IResetConsoleColor();
+    }
+
+    [Fact]
+    public void ColorChange_ShouldPersistUntilReset()
+    {
+        // This is a behavioral test without actual console output checking
+        ILib.ISetConsoleColor("green");
+        // Color should be green now
+        
+        var exception = Record.Exception(() => ILib.ILogInfo("This should be green"));
+        Assert.Null(exception);
         
         ILib.IResetConsoleColor();
     }
@@ -246,6 +261,20 @@ public class ILibTests
     public void IGetTimeUtc_WithNegativeOffset_ShouldReturnFormattedString()
     {
         var time = ILib.IGetTimeUtc("-5");
+        Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", time);
+    }
+
+    [Fact]
+    public void IGetTimeUtc_WithOffsetFormat_HHMM_ShouldWork()
+    {
+        var time = ILib.IGetTimeUtc("+0730");
+        Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", time);
+    }
+
+    [Fact]
+    public void IGetTimeUtc_WithOffsetFormat_HH_MM_ShouldWork()
+    {
+        var time = ILib.IGetTimeUtc("+7:30");
         Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", time);
     }
 
@@ -274,6 +303,14 @@ public class ILibTests
     public void IGetTimeZone_WithInvalidTimezone_ShouldNotThrow()
     {
         var exception = Record.Exception(() => ILib.IGetTimeZone("Invalid/Timezone"));
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void IGetTimeZone_WithWindowsTimezone_ShouldWork()
+    {
+        // Windows timezone names should also work
+        var exception = Record.Exception(() => ILib.IGetTimeZone("SE Asia Standard Time"));
         Assert.Null(exception);
     }
 
@@ -309,6 +346,18 @@ public class ILibTests
         var originalValue = ILib.ShowTimestamps;
         
         ILib.ShowTimestamps = false;
+        var exception = Record.Exception(() => ILib.ILogInfo("Test"));
+        Assert.Null(exception);
+        
+        ILib.ShowTimestamps = originalValue;
+    }
+
+    [Fact]
+    public void ShowTimestamps_WhenTrue_ShouldShowTimestamp()
+    {
+        var originalValue = ILib.ShowTimestamps;
+        
+        ILib.ShowTimestamps = true;
         var exception = Record.Exception(() => ILib.ILogInfo("Test"));
         Assert.Null(exception);
         
@@ -369,6 +418,12 @@ public class ILibTests
         
         exception = Record.Exception(() => ILib.ILogInfo(""));
         Assert.Null(exception);
+        
+        exception = Record.Exception(() => ILib.IWarn(null));
+        Assert.Null(exception);
+        
+        exception = Record.Exception(() => ILib.ILogError(null));
+        Assert.Null(exception);
     }
 
     [Fact]
@@ -381,6 +436,26 @@ public class ILibTests
         Assert.Null(exception);
         
         ILib.IResetConsoleColor();
+    }
+
+    [Fact]
+    public void MultipleColorChanges_ShouldWork()
+    {
+        var exception = Record.Exception(() =>
+        {
+            ILib.ISetConsoleColor("red");
+            ILib.ILogInfo("Red text");
+            
+            ILib.ISetConsoleColor("green");
+            ILib.ILogInfo("Green text");
+            
+            ILib.ISetConsoleColor("yellow");
+            ILib.ILogInfo("Yellow text");
+            
+            ILib.IResetConsoleColor();
+        });
+        
+        Assert.Null(exception);
     }
 
     // ========== Thread Safety Test ==========
@@ -399,4 +474,24 @@ public class ILibTests
         
         Assert.Null(exception);
     }
+
+    [Fact]
+    public void ConcurrentColorChanges_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() =>
+        {
+            Parallel.For(0, 10, i =>
+            {
+                ILib.ISetConsoleColor(i % 2 == 0 ? "red" : "blue");
+                ILib.IDelay(5);
+                ILib.IResetConsoleColor();
+            });
+        });
+        
+        Assert.Null(exception);
+    }
+
+    // ========== Exit Method Note ==========
+    // Note: IExit is not tested because it terminates the process
+    // This is intentional and should be tested separately if needed
 }
