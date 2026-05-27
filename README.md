@@ -11,13 +11,14 @@ A simple, lightweight C# library for console operations, logging, delays, and ap
 ## ✨ Features
 
 - 📝 **Multiple Log Levels** - Notice, Warning, Info, Error, Debug, Complete
-- ⏱️ **Delays** - Both synchronous and asynchronous delay methods
 - 🎨 **Colored Console** - Set colors by name (red, green, blue, etc.)
+- ⏱️ **Delays** - Both synchronous and asynchronous delay methods
 - ⌨️ **User Input** - ReadLine and ReadKey with null safety
 - 🧹 **Console Control** - Clear console screen with exception handling
 - 🌍 **Timezone Support** - Cross-platform timezone conversion (IANA & Windows)
 - 🛡️ **Error Handling** - Graceful exception handling with optional exit
 - 🔧 **Configurable** - Toggle timestamps, custom formats, debug mode
+- 🔒 **Security** - Automatic sensitive data masking in logs
 - 📦 **Lightweight** - Zero external dependencies
 - 🚪 **Exit** - Controlled application exit with status codes
 
@@ -35,7 +36,7 @@ NuGet\Install-Package DryFish.ILib
 
 ### PackageReference
 ```xml
-<PackageReference Include="DryFish.ILib" Version="2026.6.0" />
+<PackageReference Include="DryFish.ILib" Version="2026.7.0" />
 ```
 
 ## 🚀 Quick Start
@@ -71,6 +72,8 @@ ILib.ILogInfo($"Vietnam time: {vnTime}");
 | `ILogError(string message)` | Error log (red) | `ILib.ILogError("Failed!");` |
 | `ILogComplete(string message)` | Success log with checkmark | `ILib.ILogComplete("Done!");` |
 | `ILog(string prefix, string message)` | Custom prefixed log | `ILib.ILog("APP", "Message");` |
+| `ILogColor(string color, string message)` | Colored log with auto prefix | `ILib.ILogColor("red", "Error!");` |
+| `ILogColor(string color, string prefix, string message)` | Colored log with custom prefix | `ILib.ILogColor("cyan", "NET", "Connected");` |
 | `ILogDebug(string message)` | Debug log (requires debug mode) | `ILib.ILogDebug("Value: 42");` |
 
 ### Control Methods
@@ -147,6 +150,19 @@ ILib.INotice("Server started");
 ILib.ILogInfo("User logged in: admin");
 ILib.ILogError("Database connection failed");
 ILib.ILogComplete("Backup completed");
+```
+
+### Colored Logging
+```csharp
+// Using ILogColor with auto prefix
+ILib.ILogColor("red", "This is an error message");
+ILib.ILogColor("green", "Operation completed successfully");
+ILib.ILogColor("yellow", "Warning: Low disk space");
+ILib.ILogColor("cyan", "Debug: Variable x = 42");
+
+// Using ILogColor with custom prefix
+ILib.ILogColor("magenta", "AUTH", "User logged in");
+ILib.ILogColor("blue", "DB", "Connected to database");
 ```
 
 ### Console Colors
@@ -234,9 +250,9 @@ ILib.ILogInfo("No timestamp"); // Output: [INFO] - No timestamp
 ILib.TimestampFormat = "HH:mm:ss";
 ILib.ILogInfo("With time only"); // Output: [INFO] 14:30:45 - With time only
 
-// Enable debug mode
+// Enable debug mode (with security masking)
 ILib.ISetDebug(true);
-ILib.ILogDebug("This will show"); // Only shows when debug enabled
+ILib.ILogDebug("This will show with masked sensitive data");
 ```
 
 ### Async Delay
@@ -259,6 +275,33 @@ for (int i = 0; i <= 100; i += 20)
 ILib.ILogComplete("Complete!");
 ```
 
+## 🔒 Security Features
+
+ILib automatically masks sensitive information in logs and error messages:
+
+- ✅ Passwords and tokens (`password=***`, `token=***`)
+- ✅ Connection strings
+- ✅ Email addresses
+- ✅ IP addresses
+- ✅ Credit card numbers
+- ✅ File paths with usernames
+
+### Example:
+```csharp
+// Sensitive data is automatically masked
+ILib.ILogError("Failed with password=MySecret123");
+// Output: [ERROR] - Failed with password=[MASKED]
+
+// Stack traces are masked in debug mode
+ILib.ISetDebug(true);
+try {
+    throw new Exception("Error");
+} catch (Exception ex) {
+    ILib.IHandleError(ex);
+    // Stack trace shows [MASKED_PATH] instead of real paths
+}
+```
+
 ## 🧪 Running Tests
 
 ```bash
@@ -278,11 +321,14 @@ dotnet test --collect:"XPlat Code Coverage"
 ## 🔧 Building from Source
 
 ```bash
-# Build
+# Build all frameworks
 dotnet build src/main/DryFish.ILib.csproj --configuration Release
 
-# Pack NuGet
+# Pack NuGet package
 dotnet pack src/main/DryFish.ILib.csproj --configuration Release --output ./artifacts
+
+# Include symbols for debugging
+dotnet pack src/main/DryFish.ILib.csproj --configuration Release --output ./artifacts --include-symbols
 ```
 
 ## 📁 Project Structure
@@ -309,21 +355,26 @@ ILib/
 ## 📋 Requirements
 
 - .NET 6.0 or later
+- .NET Core 6.0+
+- .NET Framework 4.6.2+
+- .NET Standard 2.0
 - Compatible with Windows, Linux, and macOS
-- Supports .NET Framework 4.6.2+
 
 ## 🗺️ Roadmap
 
-- [x] Basic logging (Notice, Warn, Info)
+- [x] Basic logging (Notice, Warn, Info, Error, Complete)
+- [x] Colored console output
 - [x] Sync/Async delays
-- [x] Console colors (names)
 - [x] User input methods
 - [x] Clear console screen
 - [x] Cross-platform timezone
-- [x] Error handling
+- [x] Error handling with exit codes
 - [x] Debug mode
 - [x] Configurable timestamps
-- [ ] More? Maybe
+- [x] Security masking for sensitive data
+- [x] Colored logging (ILogColor)
+- [ ] File logging (planned)
+- [ ] JSON log formatting (planned)
 
 ## 🤝 Contributing
 
@@ -332,6 +383,12 @@ ILib/
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+### Guidelines:
+- Follow existing code style
+- Add tests for new features
+- Update documentation
+- Ensure all tests pass
 
 ## 📄 License
 
@@ -344,16 +401,18 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ## 🙏 Acknowledgments
 
-- Built with .NET 6/7/8
+- Built with .NET 6/7/8 and .NET Framework 4.6.2+
 - Tested with xUnit
 - CI/CD with GitHub Actions
 - Cross-platform timezone support
 - Dependabot for automated dependency updates
+- Security masking inspired by OWASP guidelines
 
 ## 📞 Support
 
-- Create an [Issue](https://github.com/dryfish09/ILib/issues)
-- Star ⭐ the repository if you find it useful!
+- 📧 Create an [Issue](https://github.com/dryfish09/ILib/issues)
+- ⭐ Star the repository if you find it useful!
+- 🔔 Watch for updates and new releases
 
 ---
 
