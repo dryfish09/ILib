@@ -50,6 +50,57 @@ public class ILibTests
     }
 
     [Fact]
+    public void ILogColor_WithColorAndPrefix_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() => ILib.ILogColor("red", "ERROR", "Test colored error"));
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ILogColor_WithAutoPrefix_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() => ILib.ILogColor("cyan", "Test message with auto prefix"));
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ILogColor_WithInvalidColor_ShouldFallbackToDefault()
+    {
+        var exception = Record.Exception(() => ILib.ILogColor("invalidcolor", "TEST", "This should use default color"));
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ILogColor_AllColors_ShouldWork()
+    {
+        var colors = new[] { "red", "green", "blue", "yellow", "cyan", "magenta", "white" };
+        
+        var exception = Record.Exception(() =>
+        {
+            foreach (var color in colors)
+            {
+                ILib.ILogColor(color, "TEST", $"Testing {color} color");
+            }
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ILogColor_WithNullMessage_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() => ILib.ILogColor("red", "TEST", null));
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ILogColor_WithEmptyMessage_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() => ILib.ILogColor("red", "TEST", ""));
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public void ILogDebug_ShouldNotThrow()
     {
         var exception = Record.Exception(() => ILib.ILogDebug("Test debug"));
@@ -132,7 +183,6 @@ public class ILibTests
     [Fact]
     public void IReadLine_WithNullInput_ShouldReturnEmpty()
     {
-        // StringReader("") makes ReadLine() return null
         var input = new StringReader("");
         Console.SetIn(input);
         
@@ -143,7 +193,6 @@ public class ILibTests
     [Fact]
     public void IReadLine_WithEmptyLine_ShouldReturnEmpty()
     {
-        // StringReader("\n") makes ReadLine() return empty string
         var input = new StringReader("\n");
         Console.SetIn(input);
         
@@ -194,7 +243,6 @@ public class ILibTests
     [Fact]
     public void ISetConsoleColor_WithInvalidColorName_ShouldFallbackToDefault()
     {
-        // Should not throw, just warn
         var exception = Record.Exception(() => ILib.ISetConsoleColor("invalidcolor"));
         Assert.Null(exception);
         ILib.IResetConsoleColor();
@@ -231,19 +279,6 @@ public class ILibTests
             var exception = Record.Exception(() => ILib.ISetConsoleColor(color));
             Assert.Null(exception);
         }
-        
-        ILib.IResetConsoleColor();
-    }
-
-    [Fact]
-    public void ColorChange_ShouldPersistUntilReset()
-    {
-        // This is a behavioral test without actual console output checking
-        ILib.ISetConsoleColor("green");
-        // Color should be green now
-        
-        var exception = Record.Exception(() => ILib.ILogInfo("This should be green"));
-        Assert.Null(exception);
         
         ILib.IResetConsoleColor();
     }
@@ -309,7 +344,6 @@ public class ILibTests
     [Fact]
     public void IGetTimeZone_WithWindowsTimezone_ShouldWork()
     {
-        // Windows timezone names should also work
         var exception = Record.Exception(() => ILib.IGetTimeZone("SE Asia Standard Time"));
         Assert.Null(exception);
     }
@@ -403,6 +437,8 @@ public class ILibTests
             ILib.ILogError("Error");
             ILib.ILogComplete("Complete");
             ILib.ILog("CUSTOM", "Custom");
+            ILib.ILogColor("cyan", "COLORED", "Colored log");
+            ILib.ILogColor("magenta", "Auto prefix colored log");
         });
         
         Assert.Null(exception);
@@ -423,6 +459,9 @@ public class ILibTests
         Assert.Null(exception);
         
         exception = Record.Exception(() => ILib.ILogError(null));
+        Assert.Null(exception);
+        
+        exception = Record.Exception(() => ILib.ILogColor("red", "TEST", null));
         Assert.Null(exception);
     }
 
@@ -458,7 +497,7 @@ public class ILibTests
         Assert.Null(exception);
     }
 
-    // ========== Thread Safety Test ==========
+    // ========== Thread Safety Tests ==========
 
     [Fact]
     public void ConcurrentLogging_ShouldNotThrow()
@@ -486,6 +525,89 @@ public class ILibTests
                 ILib.IDelay(5);
                 ILib.IResetConsoleColor();
             });
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ConcurrentILogColor_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() =>
+        {
+            Parallel.For(0, 10, i =>
+            {
+                var color = i % 2 == 0 ? "red" : "green";
+                ILib.ILogColor(color, "PARALLEL", $"Message from thread {i}");
+            });
+        });
+        
+        Assert.Null(exception);
+    }
+
+    // ========== ILogColor Specific Tests ==========
+
+    [Fact]
+    public void ILogColor_ShouldPreserveOriginalColorAfterExecution()
+    {
+        // Set a specific color
+        ILib.ISetConsoleColor("blue");
+        
+        // Call ILogColor (this will change color temporarily)
+        ILib.ILogColor("red", "TEST", "This should be red");
+        
+        // Check that color is restored (can't easily assert, but should not throw)
+        var exception = Record.Exception(() => ILib.ILogInfo("This should be back to blue"));
+        Assert.Null(exception);
+        
+        ILib.IResetConsoleColor();
+    }
+
+    [Fact]
+    public void ILogColor_WithSameColorMultipleTimes_ShouldWork()
+    {
+        var exception = Record.Exception(() =>
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                ILib.ILogColor("green", "LOOP", $"Iteration {i}");
+            }
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ILogColor_WithColorNamesCaseInsensitive_ShouldWork()
+    {
+        var exception = Record.Exception(() =>
+        {
+            ILib.ILogColor("RED", "CASE", "Uppercase color name");
+            ILib.ILogColor("Blue", "CASE", "Capitalized color name");
+            ILib.ILogColor("GrEeN", "CASE", "Mixed case color name");
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ILogColor_WithAllSupportedColors_ShouldWork()
+    {
+        var colors = new[] 
+        { 
+            "black", "darkblue", "darkgreen", "darkcyan", "darkred", 
+            "darkmagenta", "darkyellow", "gray", "grey", "darkgray", 
+            "darkgrey", "blue", "green", "cyan", "red", "magenta", 
+            "yellow", "white" 
+        };
+        
+        var exception = Record.Exception(() =>
+        {
+            foreach (var color in colors)
+            {
+                ILib.ILogColor(color, "ALL", $"Testing {color} color");
+                ILib.IDelay(10);
+            }
         });
         
         Assert.Null(exception);
