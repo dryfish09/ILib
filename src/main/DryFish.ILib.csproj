@@ -3,13 +3,13 @@
     <!-- Target multiple frameworks -->
     <TargetFrameworks>net8.0;net7.0;net6.0;netstandard2.0;net48;net472;net462</TargetFrameworks>
     
-    <ImplicitUsings>disable</ImplicitUsings>
-    <Nullable>disable</Nullable>
-    <LangVersion>7.3</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>10.0</LangVersion>
     
     <!-- Package info -->
     <PackageId>DryFish.ILib</PackageId>
-    <Version>2026.5.2</Version>
+    <Version>2026.5.1</Version>
     <Authors>DryFish</Authors>
     <Company>DryFish</Company>
     <Description>A lightweight, cross-platform C# library for console operations, logging, delays, input, colors, timezone, and error handling. Supports .NET 6/7/8, .NET Standard 2.0, and .NET Framework 4.6.2+.</Description>
@@ -30,47 +30,32 @@
     <!-- Output -->
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageOutputPath>../../nupkg</PackageOutputPath>
-    
-    <!-- Suppress warnings for XML comments -->
-    <NoWarn>$(NoWarn);CS1591;CS1573;CS1712</NoWarn>
   </PropertyGroup>
 
   <!-- .NET 6+ specific features -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' Or '$(TargetFramework)' == 'net7.0' Or '$(TargetFramework)' == 'net6.0'">
     <DefineConstants>$(DefineConstants);NET6_0_OR_GREATER</DefineConstants>
-    <LangVersion>10.0</LangVersion>
-    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <!-- .NET Framework specific -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net48' Or '$(TargetFramework)' == 'net472' Or '$(TargetFramework)' == 'net462'">
     <DefineConstants>$(DefineConstants);NETFRAMEWORK</DefineConstants>
-    <LangVersion>7.3</LangVersion>
-    <Nullable>disable</Nullable>
-    <NoWarn>$(NoWarn);CS8600;CS8602;CS8603;CS8604;CS8618;CS8625;CS8632</NoWarn>
+    <NoWarn>$(NoWarn);CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</NoWarn>
   </PropertyGroup>
 
   <!-- .NET Standard -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <DefineConstants>$(DefineConstants);NETSTANDARD</DefineConstants>
-    <LangVersion>8.0</LangVersion>
-    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <!-- Include README and LICENSE in package -->
   <ItemGroup>
-    <None Include="../../README.md" Pack="true" PackagePath="/" Condition="Exists('../../README.md')"/>
-    <None Include="../../LICENSE" Pack="true" PackagePath="/" Condition="Exists('../../LICENSE')"/>
+    <None Include="../../README.md" Pack="true" PackagePath="/"/>
+    <None Include="../../LICENSE" Pack="true" PackagePath="/"/>
   </ItemGroup>
 
   <!-- Conditional reference for .NET Framework -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net48' Or '$(TargetFramework)' == 'net472' Or '$(TargetFramework)' == 'net462'">
     <PackageReference Include="System.Runtime.InteropServices.RuntimeInformation" Version="4.3.0" />
-    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-  </ItemGroup>
-
-  <!-- Reference for .NET Standard 2.0 -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
 </Project>
