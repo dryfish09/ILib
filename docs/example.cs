@@ -1,56 +1,39 @@
 using DryFish.ILib;
+using System.Threading.Tasks;
 
-namespace myapp
+namespace MyApp
 {
     class Program
     {
-        static void Main()
+        static async Task Main()
         {
-            // 1. INotice - Thông báo thông thường
-            ILib.INotice("Application starting...");
+            // Enable debug mode
+            ILib.ISetDebug(true);
             
-            // 2. ILogInfo - Info log
-            ILib.ILogInfo("Initializing application components");
+            ILib.INotice("Application starting (async mode)...");
             
-            // 3. IDelay - Delay (sleep)
-            ILib.ILogInfo("Waiting 2 seconds...");
-            ILib.IDelay(2000);
+            // Async delay without blocking
+            ILib.ILogInfo("Waiting 2 seconds asynchronously...");
+            await ILib.IDelayAsync(2000);
             
-            // 4. Kiểm tra dependency
-            string dependency = "no";
-            string requirement = "ILib";
+            // Simulate async processing
+            ILib.ILogInfo("Processing data asynchronously...");
+            await ProcessDataAsync();
             
-            if (dependency != requirement)
+            // Get timezone info
+            string vnTime = ILib.IGetTimeZone("Asia/Ho_Chi_Minh");
+            ILib.ILogInfo($"Current time in Vietnam: {vnTime}");
+            
+            ILib.ILogComplete("Application completed!");
+        }
+        
+        static async Task ProcessDataAsync()
+        {
+            for (int i = 0; i <= 100; i += 20)
             {
-                // 5. IWarn - Cảnh báo
-                ILib.IWarn("Missing dependencies detected!");
-                
-                // 6. ILog - Custom log với prefix
-                ILib.ILog("CHECK", "Dependency check failed");
-                ILib.ILog("REQUIRED", requirement);
-                ILib.ILog("FOUND", dependency);
-                
-                // 7. ILogDebug - Debug log (chỉ hiển thị trong DEBUG mode)
-                ILib.ILogDebug("This debug message won't show in Release mode");
-                
-                // 8. IExit - Thoát với mã lỗi
-                ILib.IExit(1);
+                ILib.ILogInfo($"Progress: {i}%");
+                await ILib.IDelayAsync(300);
             }
-            
-            // Nếu không có lỗi, tiếp tục
-            ILib.ILogInfo("All dependencies satisfied!");
-            
-            // 9. INotice - Thông báo thành công
-            ILib.INotice("Application running successfully");
-            
-            // 10. Delay async
-            ILib.IDelayAsync(1000).Wait(); // Hoặc dùng await trong async method
-            
-            ILib.ILogInfo("Processing data...");
-            ILib.IDelay(500);
-            
-            ILib.ILogInfo("Done!");
-            ILib.INotice("Application finished");
         }
     }
 }
