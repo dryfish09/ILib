@@ -118,6 +118,46 @@ public static class ILib
     }
 
     /// <summary>
+    /// Displays a colored log message with a specified prefix and timestamp.
+    /// </summary>
+    /// <param name="color">Color name (black, red, green, yellow, blue, magenta, cyan, white, etc.)</param>
+    /// <param name="prefix">The custom prefix for the log entry.</param>
+    /// <param name="message">The log message to display.</param>
+    public static void ILogColor(string color, string prefix, string message)
+    {
+        lock (_consoleLock)
+        {
+            var originalColor = Console.ForegroundColor;
+            var consoleColor = ParseColor(color);
+            
+            if (consoleColor.HasValue)
+            {
+                Console.ForegroundColor = consoleColor.Value;
+            }
+            else
+            {
+                IWarn($"Unknown color: {color}. Using default color.");
+            }
+            
+            var timestamp = GetTimestamp();
+            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
+            Console.WriteLine($"[{prefix}]{timestampPart} - {message}");
+            
+            Console.ForegroundColor = originalColor;
+        }
+    }
+
+    /// <summary>
+    /// Displays a colored log message with automatic prefix based on color name.
+    /// </summary>
+    /// <param name="color">Color name for both text and prefix.</param>
+    /// <param name="message">The log message to display.</param>
+    public static void ILogColor(string color, string message)
+    {
+        ILogColor(color, color.ToUpperInvariant(), message);
+    }
+
+    /// <summary>
     /// Displays a debug log message in cyan color. Only appears if debug is enabled.
     /// </summary>
     /// <param name="message">The debug message to display.</param>
