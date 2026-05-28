@@ -225,6 +225,20 @@ public static class ILib
             }
         }
     }
+    public static void IWriteLine(string msg)
+    {
+        lock(_consoleLock)
+        {
+            Console.WriteLine(msg);
+        }
+    }
+    public static void IWrite(string msg)
+    {
+        lock(_consoleLock)
+        {
+            Console.Write(msg);
+        }
+    }
 
     // ========== Delay Methods ==========
 
