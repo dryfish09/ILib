@@ -36,7 +36,7 @@ NuGet\Install-Package DryFish.ILib
 
 ### PackageReference
 ```xml
-<PackageReference Include="DryFish.ILib" Version="2026.7.0" />
+<PackageReference Include="DryFish.ILib" Version="2026.8.0-beta1" />
 ```
 
 ## 🚀 Quick Start
@@ -75,6 +75,13 @@ ILib.ILogInfo($"Vietnam time: {vnTime}");
 | `ILogColor(string color, string message)` | Colored log with auto prefix | `ILib.ILogColor("red", "Error!");` |
 | `ILogColor(string color, string prefix, string message)` | Colored log with custom prefix | `ILib.ILogColor("cyan", "NET", "Connected");` |
 | `ILogDebug(string message)` | Debug log (requires debug mode) | `ILib.ILogDebug("Value: 42");` |
+
+### Console Output Methods
+
+| Method | Description | Example |
+|--------|-------------|---------|
+| `IWrite(string message)` | Write text without newline | `ILib.IWrite("Enter name: ");` |
+| `IWriteLine(string message)` | Write line of text | `ILib.IWriteLine("Hello World!");` |
 
 ### Control Methods
 
@@ -163,6 +170,16 @@ ILib.ILogColor("cyan", "Debug: Variable x = 42");
 // Using ILogColor with custom prefix
 ILib.ILogColor("magenta", "AUTH", "User logged in");
 ILib.ILogColor("blue", "DB", "Connected to database");
+```
+
+### Direct Console Output
+```csharp
+// Write without newline
+ILib.IWrite("Enter your age: ");
+string age = ILib.IReadLine();
+
+// Write line
+ILib.IWriteLine($"You entered: {age}");
 ```
 
 ### Console Colors
@@ -366,6 +383,7 @@ ILib/
 - [x] Colored console output
 - [x] Sync/Async delays
 - [x] User input methods
+- [x] Direct console output (IWrite, IWriteLine)
 - [x] Clear console screen
 - [x] Cross-platform timezone
 - [x] Error handling with exit codes
@@ -375,6 +393,7 @@ ILib/
 - [x] Colored logging (ILogColor)
 - [ ] File logging (planned)
 - [ ] JSON log formatting (planned)
+- [ ] Log rotation (planned)
 
 ## 🤝 Contributing
 
