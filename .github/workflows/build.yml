@@ -1,4 +1,4 @@
-Không đổi action version, cập nhật để config prerelease/latest qua tick trong checkbox khi chạy thủ công
+
 name: Build, Test, and Publish DryFish.ILib
 
 on:
