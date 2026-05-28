@@ -45,11 +45,21 @@ public static class ILib
     {
         // Windows paths with usernames
         @"[A-Za-z]:\\Users\\[^\\]+\\",
+        @"[A-Za-z]:\\Documents and Settings\\[^\\]+\\",
         // Linux/Unix home paths
         @"/home/[^/]+/",
+        // macOS paths
+        @"/Users/[^/]+/",
         // Windows System paths
         @"[A-Za-z]:\\Windows\\[^\\]+\\",
-        @"[A-Za-z]:\\Program Files(?: \(x86\))?\\[^\\]+\\"
+        @"[A-Za-z]:\\Program Files(?: \(x86\))?\\[^\\]+\\",
+        // Package manager paths
+        @"/home/[^/]+/\.nuget/",
+        @"/Users/[^/]+/\.nuget/",
+        @"C:\\Users\\[^\\]+\\.nuget\\",
+        @"/home/[^/]+/\.dotnet/",
+        @"/Users/[^/]+/\.dotnet/",
+        @"C:\\Users\\[^\\]+\\.dotnet\\",
     };
 
     // ========== Basic Logging Methods ==========
@@ -58,6 +68,11 @@ public static class ILib
     /// Displays a notice message to the console.
     /// </summary>
     /// <param name="message">The notice message to display.</param>
+    /// <example>
+    /// <code>
+    /// ILib.INotice("Application started successfully");
+    /// </code>
+    /// </example>
     public static void INotice(string message)
     {
         lock (_consoleLock)
@@ -70,6 +85,11 @@ public static class ILib
     /// Displays a warning message in yellow color.
     /// </summary>
     /// <param name="message">The warning message to display.</param>
+    /// <example>
+    /// <code>
+    /// ILib.IWarn("Low disk space detected");
+    /// </code>
+    /// </example>
     public static void IWarn(string message)
     {
         lock (_consoleLock)
@@ -85,6 +105,11 @@ public static class ILib
     /// Displays an informational log message with timestamp in green color.
     /// </summary>
     /// <param name="message">The info message to display.</param>
+    /// <example>
+    /// <code>
+    /// ILib.ILogInfo("User logged in: admin");
+    /// </code>
+    /// </example>
     public static void ILogInfo(string message)
     {
         lock (_consoleLock)
@@ -102,6 +127,12 @@ public static class ILib
     /// Displays an error log message in red color.
     /// </summary>
     /// <param name="message">The error message to display.</param>
+    /// <remarks>Sensitive data in the message will be automatically masked.</remarks>
+    /// <example>
+    /// <code>
+    /// ILib.ILogError("Failed to connect to database");
+    /// </code>
+    /// </example>
     public static void ILogError(string message)
     {
         lock (_consoleLock)
@@ -119,9 +150,14 @@ public static class ILib
     }
 
     /// <summary>
-    /// Displays a completion/success message in green color.
+    /// Displays a completion/success message in green color with a checkmark.
     /// </summary>
     /// <param name="message">The completion message to display.</param>
+    /// <example>
+    /// <code>
+    /// ILib.ILogComplete("Backup completed successfully");
+    /// </code>
+    /// </example>
     public static void ILogComplete(string message)
     {
         lock (_consoleLock)
@@ -140,6 +176,11 @@ public static class ILib
     /// </summary>
     /// <param name="prefix">The custom prefix for the log entry.</param>
     /// <param name="message">The log message to display.</param>
+    /// <example>
+    /// <code>
+    /// ILib.ILog("AUTH", "User authentication successful");
+    /// </code>
+    /// </example>
     public static void ILog(string prefix, string message)
     {
         lock (_consoleLock)
@@ -156,6 +197,12 @@ public static class ILib
     /// <param name="color">Color name (black, red, green, yellow, blue, magenta, cyan, white, etc.)</param>
     /// <param name="prefix">The custom prefix for the log entry.</param>
     /// <param name="message">The log message to display.</param>
+    /// <example>
+    /// <code>
+    /// ILib.ILogColor("red", "ERROR", "Critical system failure");
+    /// ILib.ILogColor("green", "SUCCESS", "Operation completed");
+    /// </code>
+    /// </example>
     public static void ILogColor(string color, string prefix, string message)
     {
         lock (_consoleLock)
@@ -169,7 +216,10 @@ public static class ILib
             }
             else
             {
-                IWarn($"Unknown color: {color}. Using default color.");
+                var originalColorTemp = Console.ForegroundColor;
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"[WARN] Unknown color: {color}. Using default color.");
+                Console.ForegroundColor = originalColorTemp;
             }
             
             var timestamp = GetTimestamp();
@@ -185,6 +235,12 @@ public static class ILib
     /// </summary>
     /// <param name="color">Color name for both text and prefix.</param>
     /// <param name="message">The log message to display.</param>
+    /// <example>
+    /// <code>
+    /// ILib.ILogColor("cyan", "Debug information");
+    /// ILib.ILogColor("magenta", "Custom colored message");
+    /// </code>
+    /// </example>
     public static void ILogColor(string color, string message)
     {
         ILogColor(color, color.ToUpperInvariant(), message);
@@ -194,6 +250,16 @@ public static class ILib
     /// Displays a debug log message in cyan color. Only appears if debug is enabled.
     /// </summary>
     /// <param name="message">The debug message to display.</param>
+    /// <remarks>
+    /// Debug mode must be enabled using <see cref="ISetDebug(bool)"/> for these messages to appear.
+    /// Sensitive data is automatically masked even in debug mode.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// ILib.ISetDebug(true);
+    /// ILib.ILogDebug("Variable x = 42");
+    /// </code>
+    /// </example>
     public static void ILogDebug(string message)
     {
         if (!_debugEnabled) return;
@@ -214,6 +280,16 @@ public static class ILib
     /// Enables or disables debug logging.
     /// </summary>
     /// <param name="enabled">True to enable debug logging, false to disable.</param>
+    /// <remarks>
+    /// When debug mode is enabled, additional debug messages and masked stack traces will be logged.
+    /// Do NOT enable debug mode in production environments as stack traces may contain sensitive information.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// ILib.ISetDebug(true);  // Enable debug mode
+    /// ILib.ISetDebug(false); // Disable debug mode
+    /// </code>
+    /// </example>
     public static void ISetDebug(bool enabled)
     {
         lock (_consoleLock)
@@ -225,6 +301,16 @@ public static class ILib
             }
         }
     }
+
+    /// <summary>
+    /// Writes a line of text to the console.
+    /// </summary>
+    /// <param name="msg">The message to write.</param>
+    /// <example>
+    /// <code>
+    /// ILib.IWriteLine("Hello, World!");
+    /// </code>
+    /// </example>
     public static void IWriteLine(string msg)
     {
         lock(_consoleLock)
@@ -232,6 +318,17 @@ public static class ILib
             Console.WriteLine(msg);
         }
     }
+
+    /// <summary>
+    /// Writes text to the console without a newline.
+    /// </summary>
+    /// <param name="msg">The message to write.</param>
+    /// <example>
+    /// <code>
+    /// ILib.IWrite("Enter your name: ");
+    /// string name = ILib.IReadLine();
+    /// </code>
+    /// </example>
     public static void IWrite(string msg)
     {
         lock(_consoleLock)
@@ -246,6 +343,11 @@ public static class ILib
     /// Pauses the current thread for the specified number of milliseconds.
     /// </summary>
     /// <param name="milliseconds">The number of milliseconds to delay. Positive values only.</param>
+    /// <example>
+    /// <code>
+    /// ILib.IDelay(1000); // Wait for 1 second
+    /// </code>
+    /// </example>
     public static void IDelay(int milliseconds)
     {
         if (milliseconds > 0)
@@ -257,6 +359,11 @@ public static class ILib
     /// </summary>
     /// <param name="milliseconds">The number of milliseconds to delay. Positive values only.</param>
     /// <returns>A task that completes after the specified delay.</returns>
+    /// <example>
+    /// <code>
+    /// await ILib.IDelayAsync(1000); // Wait for 1 second asynchronously
+    /// </code>
+    /// </example>
     public static async Task IDelayAsync(int milliseconds)
     {
         if (milliseconds > 0)
@@ -269,6 +376,13 @@ public static class ILib
     /// Exits the current application with the specified exit code.
     /// </summary>
     /// <param name="exitCode">The exit code to return to the operating system.</param>
+    /// <remarks>This method terminates the current process immediately.</remarks>
+    /// <example>
+    /// <code>
+    /// ILib.IExit(0); // Successful exit
+    /// ILib.IExit(1); // Error exit
+    /// </code>
+    /// </example>
     public static void IExit(int exitCode)
     {
         Environment.Exit(exitCode);
@@ -280,6 +394,11 @@ public static class ILib
     /// Reads a line of input from the console with null safety.
     /// </summary>
     /// <returns>The input string, or empty string if null.</returns>
+    /// <example>
+    /// <code>
+    /// string input = ILib.IReadLine();
+    /// </code>
+    /// </example>
     public static string IReadLine()
     {
         lock (_consoleLock)
@@ -294,6 +413,11 @@ public static class ILib
     /// </summary>
     /// <param name="prompt">The prompt to display before reading input.</param>
     /// <returns>The input string, or empty string if null.</returns>
+    /// <example>
+    /// <code>
+    /// string name = ILib.IReadLine("Enter your name: ");
+    /// </code>
+    /// </example>
     public static string IReadLine(string prompt)
     {
         lock (_consoleLock)
@@ -305,9 +429,15 @@ public static class ILib
     }
 
     /// <summary>
-    /// Reads a key press from the console.
+    /// Reads a key press from the console without displaying it.
     /// </summary>
     /// <returns>The key info, or null if not available.</returns>
+    /// <example>
+    /// <code>
+    /// var key = ILib.IReadKey();
+    /// if (key?.Key == ConsoleKey.Y) { }
+    /// </code>
+    /// </example>
     public static ConsoleKeyInfo? IReadKey()
     {
         lock (_consoleLock)
@@ -328,6 +458,11 @@ public static class ILib
     /// </summary>
     /// <param name="intercept">Whether to intercept the key (not display it).</param>
     /// <returns>The key info, or null if not available.</returns>
+    /// <example>
+    /// <code>
+    /// var key = ILib.IReadKey(false); // Display the key pressed
+    /// </code>
+    /// </example>
     public static ConsoleKeyInfo? IReadKey(bool intercept)
     {
         lock (_consoleLock)
@@ -348,6 +483,11 @@ public static class ILib
     /// </summary>
     /// <param name="prompt">The prompt to display.</param>
     /// <returns>The key info, or null if not available.</returns>
+    /// <example>
+    /// <code>
+    /// var key = ILib.IReadKey("Press any key to continue...");
+    /// </code>
+    /// </example>
     public static ConsoleKeyInfo? IReadKey(string prompt)
     {
         lock (_consoleLock)
@@ -369,6 +509,14 @@ public static class ILib
     /// <summary>
     /// Clears the console screen. Handles IOException gracefully when output is redirected.
     /// </summary>
+    /// <remarks>
+    /// This method is safe to call even when console output is redirected (e.g., in CI/CD pipelines).
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// ILib.IClearConsole();
+    /// </code>
+    /// </example>
     public static void IClearConsole()
     {
         lock (_consoleLock)
@@ -390,6 +538,16 @@ public static class ILib
     /// Sets the console foreground color using a color name.
     /// </summary>
     /// <param name="color">Color name (black, darkblue, darkgreen, darkcyan, darkred, darkmagenta, darkyellow, gray, darkgray, blue, green, cyan, red, magenta, yellow, white).</param>
+    /// <remarks>
+    /// Supported colors: black, darkblue, darkgreen, darkcyan, darkred, darkmagenta, darkyellow, gray, grey, darkgray, darkgrey, blue, green, cyan, red, magenta, yellow, white.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// ILib.ISetConsoleColor("red");
+    /// ILib.INotice("This is red text");
+    /// ILib.IResetConsoleColor();
+    /// </code>
+    /// </example>
     public static void ISetConsoleColor(string color)
     {
         lock (_consoleLock)
@@ -418,6 +576,13 @@ public static class ILib
     /// </summary>
     /// <param name="foregroundColor">Text color name.</param>
     /// <param name="backgroundColor">Background color name.</param>
+    /// <example>
+    /// <code>
+    /// ILib.ISetConsoleColor("yellow", "blue");
+    /// ILib.INotice("Yellow text on blue background");
+    /// ILib.IResetConsoleColor();
+    /// </code>
+    /// </example>
     public static void ISetConsoleColor(string foregroundColor, string backgroundColor)
     {
         lock (_consoleLock)
@@ -430,6 +595,14 @@ public static class ILib
     /// <summary>
     /// Resets console colors to their original/default values.
     /// </summary>
+    /// <example>
+    /// <code>
+    /// ILib.ISetConsoleColor("red");
+    /// ILib.INotice("Red text");
+    /// ILib.IResetConsoleColor();
+    /// ILib.INotice("Default color");
+    /// </code>
+    /// </example>
     public static void IResetConsoleColor()
     {
         lock (_consoleLock)
@@ -453,6 +626,12 @@ public static class ILib
     /// </summary>
     /// <param name="utcOffset">Timezone offset (e.g., "+7", "-5", "+0530", "+7:30").</param>
     /// <returns>Formatted datetime string in "yyyy-MM-dd HH:mm:ss" format.</returns>
+    /// <example>
+    /// <code>
+    /// string vietnamTime = ILib.IGetTimeUtc("+7");
+    /// string nyTime = ILib.IGetTimeUtc("-5");
+    /// </code>
+    /// </example>
     public static string IGetTimeUtc(string utcOffset)
     {
         var offset = ParseTimezoneOffset(utcOffset);
@@ -468,6 +647,11 @@ public static class ILib
     /// <param name="utcOffset">Timezone offset (e.g., "+7", "-5").</param>
     /// <param name="format">Custom datetime format string.</param>
     /// <returns>Formatted datetime string.</returns>
+    /// <example>
+    /// <code>
+    /// string time = ILib.IGetTimeUtc("+7", "HH:mm:ss");
+    /// </code>
+    /// </example>
     public static string IGetTimeUtc(string utcOffset, string format)
     {
         var offset = ParseTimezoneOffset(utcOffset);
@@ -482,6 +666,15 @@ public static class ILib
     /// </summary>
     /// <param name="timezoneId">IANA timezone ID (e.g., "Asia/Ho_Chi_Minh", "America/New_York").</param>
     /// <returns>Formatted datetime string in "yyyy-MM-dd HH:mm:ss" format.</returns>
+    /// <remarks>
+    /// Supports both IANA timezone IDs (Linux/macOS) and Windows timezone IDs.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// string vnTime = ILib.IGetTimeZone("Asia/Ho_Chi_Minh");
+    /// string nyTime = ILib.IGetTimeZone("America/New_York");
+    /// </code>
+    /// </example>
     public static string IGetTimeZone(string timezoneId)
     {
         var tz = GetTimeZoneInfo(timezoneId);
@@ -495,6 +688,11 @@ public static class ILib
     /// <param name="timezoneId">IANA timezone ID.</param>
     /// <param name="format">Custom datetime format.</param>
     /// <returns>Formatted datetime string.</returns>
+    /// <example>
+    /// <code>
+    /// string time = ILib.IGetTimeZone("Asia/Ho_Chi_Minh", "HH:mm dd/MM/yyyy");
+    /// </code>
+    /// </example>
     public static string IGetTimeZone(string timezoneId, string format)
     {
         var tz = GetTimeZoneInfo(timezoneId);
@@ -512,12 +710,30 @@ public static class ILib
     /// <returns>True if handled gracefully.</returns>
     /// <remarks>
     /// Security: Stack traces are masked to hide sensitive information like:
-    /// - File paths with usernames
-    /// - Connection strings
-    /// - Passwords, tokens, and API keys
-    /// - Email addresses and IP addresses
-    /// - Credit card numbers
+    /// <list type="bullet">
+    /// <item><description>File paths with usernames</description></item>
+    /// <item><description>Connection strings</description></item>
+    /// <item><description>Passwords, tokens, and API keys</description></item>
+    /// <item><description>Email addresses and IP addresses</description></item>
+    /// <item><description>Credit card numbers</description></item>
+    /// </list>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// try {
+    ///     // Some operation
+    /// } catch (Exception ex) {
+    ///     ILib.IHandleError(ex);
+    /// }
+    /// 
+    /// // With exit
+    /// try {
+    ///     // Critical operation
+    /// } catch (Exception ex) {
+    ///     ILib.IHandleError(ex, 1);
+    /// }
+    /// </code>
+    /// </example>
     public static bool IHandleError(Exception ex, int? exitCode = null)
     {
         // Null check to prevent NullReferenceException
@@ -570,6 +786,13 @@ public static class ILib
     /// <param name="errorMessage">The error message.</param>
     /// <param name="exitCode">Optional exit code.</param>
     /// <returns>True if handled.</returns>
+    /// <remarks>Sensitive data in the error message will be automatically masked.</remarks>
+    /// <example>
+    /// <code>
+    /// ILib.IHandleError("Configuration file not found");
+    /// ILib.IHandleError("Critical error", 1);
+    /// </code>
+    /// </example>
     public static bool IHandleError(string errorMessage, int? exitCode = null)
     {
         bool shouldExit = false;
@@ -633,6 +856,7 @@ public static class ILib
     
     /// <summary>
     /// Masks sensitive information in stack traces (paths, usernames, etc.)
+    /// Cross-platform compatible for Windows, Linux, and macOS.
     /// </summary>
     private static string MaskStackTrace(string stackTrace)
     {
@@ -645,7 +869,7 @@ public static class ILib
         {
             try
             {
-                result = Regex.Replace(result, pattern, "[MASKED_PATH]");
+                result = Regex.Replace(result, pattern, "[MASKED_PATH]", RegexOptions.IgnoreCase);
             }
             catch { /* Skip invalid patterns */ }
         }
@@ -671,11 +895,25 @@ public static class ILib
     /// <summary>
     /// Gets or sets whether timestamps are shown in logs.
     /// </summary>
+    /// <value>True to show timestamps (default), false to hide them.</value>
+    /// <example>
+    /// <code>
+    /// ILib.ShowTimestamps = false;
+    /// ILib.ILogInfo("No timestamp in this log");
+    /// </code>
+    /// </example>
     public static bool ShowTimestamps { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the timestamp format.
     /// </summary>
+    /// <value>A custom datetime format string (default: "yyyy-MM-dd HH:mm:ss").</value>
+    /// <example>
+    /// <code>
+    /// ILib.TimestampFormat = "HH:mm:ss";
+    /// ILib.ILogInfo("Shows time only");
+    /// </code>
+    /// </example>
     public static string TimestampFormat { get; set; } = "yyyy-MM-dd HH:mm:ss";
 
     private static string GetTimestamp()
