@@ -230,17 +230,19 @@ jobs:
     name: Publish to NuGet
     needs: pack
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_nuget == true)
+    # Use always() to ensure this job runs regardless of previous job status
+    # But add condition to actually publish only when needed
+    if: always()
     
     steps:
     - name: Debug info
       run: |
+        echo "=== DEBUG INFO ==="
         echo "Event name: ${{ github.event_name }}"
         echo "Release type: ${{ github.event.inputs.release_type }}"
         echo "Publish to NuGet: ${{ github.event.inputs.publish_to_nuget }}"
-        echo "Should run: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_nuget == true) }}"
+        echo "GitHub ref: ${{ github.ref }}"
+        echo "=================="
     
     - name: Checkout code
       uses: actions/checkout@v6
@@ -279,25 +281,59 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "IS_PRERELEASE=${{ github.event.inputs.release_type == 'prerelease' }}" >> $GITHUB_OUTPUT
         else
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          else
+            # Skip publish for branch pushes (not tags)
+            echo "SKIP_PUBLISH=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+        fi
+    
+    - name: Check if should publish
+      id: should_publish
+      run: |
+        SHOULD_PUBLISH="false"
+        
+        # For tag pushes - always publish
+        if [[ "${{ github.event_name }}" == "push" && "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]]; then
+          SHOULD_PUBLISH="true"
+          echo "Publishing because: tag push"
+        fi
+        
+        # For workflow dispatch with publish_to_nuget=true
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.publish_to_nuget }}" == "true" ]]; then
+          SHOULD_PUBLISH="true"
+          echo "Publishing because: workflow_dispatch with publish_to_nuget=true"
+        fi
+        
+        echo "SHOULD_PUBLISH=${SHOULD_PUBLISH}" >> $GITHUB_OUTPUT
+        
+        if [ "${SHOULD_PUBLISH}" == "false" ]; then
+          echo "::warning::Skipping publish to NuGet.org"
         fi
     
     - name: Publish to NuGet.org
+      if: steps.should_publish.outputs.SHOULD_PUBLISH == 'true'
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
       run: |
         if [ -n "$NUGET_API_KEY" ]; then
+          echo "Publishing to NuGet.org..."
           dotnet nuget push ./artifacts/*.nupkg \
             --api-key $NUGET_API_KEY \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
+          echo "Published successfully!"
         else
-          echo "::warning::NUGET_API_KEY not set. Skipping publish."
+          echo "::error::NUGET_API_KEY not set. Cannot publish to NuGet.org"
+          exit 1
         fi
     
     - name: Create GitHub Release
+      if: steps.should_publish.outputs.SHOULD_PUBLISH == 'true'
       uses: softprops/action-gh-release@v3
       with:
         files: ./artifacts/*.nupkg
@@ -307,3 +343,14 @@ jobs:
         tag_name: v${{ steps.get_version.outputs.VERSION }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Publish summary
+      if: always()
+      run: |
+        echo "## 📦 Publish Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Event | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Version | ${{ steps.get_version.outputs.VERSION }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Prerelease | ${{ steps.get_version.outputs.IS_PRERELEASE }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Published | ${{ steps.should_publish.outputs.SHOULD_PUBLISH }} |" >> $GITHUB_STEP_SUMMARY
