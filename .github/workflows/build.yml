@@ -35,6 +35,11 @@ on:
         description: 'Tag message (optional)'
         required: false
         type: string
+      publish_to_nuget:
+        description: 'Publish to NuGet.org'
+        required: false
+        default: true
+        type: boolean
 
 env:
   DOTNET_VERSION: '8.0.x'
@@ -174,7 +179,6 @@ jobs:
       id: get_version
       run: |
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          # Use the same version from create-tag or generate new
           if [ -n "${{ needs.create-tag.outputs.version }}" ]; then
             VERSION="${{ needs.create-tag.outputs.version }}"
           else
@@ -191,13 +195,11 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "IS_PRERELEASE=${{ github.event.inputs.release_type == 'prerelease' }}" >> $GITHUB_OUTPUT
         else
-          # For tag push, use tag version
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
             echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
           else
-            # For branch push, use date-based prerelease
             YEAR=$(date +'%Y')
             MONTH=$(date +'%-m')
             DAY=$(date +'%-d')
@@ -224,19 +226,24 @@ jobs:
           ./artifacts/*.nupkg
           ./artifacts/*.snupkg
 
-  publish:
+  publish-to-nuget:
     name: Publish to NuGet
     needs: pack
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_type == 'latest')
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_nuget == true)
     
     steps:
+    - name: Debug info
+      run: |
+        echo "Event name: ${{ github.event_name }}"
+        echo "Release type: ${{ github.event.inputs.release_type }}"
+        echo "Publish to NuGet: ${{ github.event.inputs.publish_to_nuget }}"
+        echo "Should run: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_nuget == true) }}"
+    
     - name: Checkout code
       uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
@@ -249,103 +256,54 @@ jobs:
         name: nuget-packages
         path: ./artifacts
     
+    - name: List artifacts
+      run: ls -la ./artifacts/
+    
     - name: Get version info
       id: get_version
       run: |
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          YEAR=$(date +'%Y')
-          MONTH=$(date +'%-m')
-          DAY=$(date +'%-d')
-          VERSION="${YEAR}.${MONTH}.${DAY}"
+          if [ -n "${{ needs.create-tag.outputs.version }}" ]; then
+            VERSION="${{ needs.create-tag.outputs.version }}"
+          else
+            YEAR=$(date +'%Y')
+            MONTH=$(date +'%-m')
+            DAY=$(date +'%-d')
+            if [ "${{ github.event.inputs.release_type }}" == "latest" ]; then
+              VERSION="${YEAR}.${MONTH}.${DAY}"
+            else
+              SUFFIX="${{ github.event.inputs.version_suffix }}"
+              VERSION="${YEAR}.${MONTH}.${DAY}-${SUFFIX}"
+            fi
+          fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          echo "IS_PRERELEASE=${{ github.event.inputs.release_type == 'prerelease' }}" >> $GITHUB_OUTPUT
         else
           VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
         fi
     
-    - name: Pack with version
-      run: |
-        dotnet pack src/main/DryFish.ILib.csproj \
-          --configuration Release \
-          -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
-          -p:IncludeSymbols=true \
-          -p:SymbolPackageFormat=snupkg \
-          --output ./artifacts
-    
     - name: Publish to NuGet.org
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
       run: |
-        dotnet nuget push ./artifacts/*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
+        if [ -n "$NUGET_API_KEY" ]; then
+          dotnet nuget push ./artifacts/*.nupkg \
+            --api-key $NUGET_API_KEY \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+        else
+          echo "::warning::NUGET_API_KEY not set. Skipping publish."
+        fi
     
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v3
       with:
         files: ./artifacts/*.nupkg
         generate_release_notes: true
-        name: Release v${{ steps.get_version.outputs.VERSION }}
+        name: ${{ steps.get_version.outputs.IS_PRERELEASE == 'true' && 'Prerelease' || 'Release' }} v${{ steps.get_version.outputs.VERSION }}
         prerelease: ${{ steps.get_version.outputs.IS_PRERELEASE == 'true' }}
         tag_name: v${{ steps.get_version.outputs.VERSION }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-prerelease:
-    name: Publish Prerelease to NuGet
-    needs: pack
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' && 
-      github.event.inputs.release_type == 'prerelease'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-    
-    - name: Download artifacts
-      uses: actions/download-artifact@v8
-      with:
-        name: nuget-packages
-        path: ./artifacts
-    
-    - name: Get version info
-      id: get_version
-      run: |
-        if [ -n "${{ needs.create-tag.outputs.version }}" ]; then
-          VERSION="${{ needs.create-tag.outputs.version }}"
-        else
-          YEAR=$(date +'%Y')
-          MONTH=$(date +'%-m')
-          DAY=$(date +'%-d')
-          SUFFIX="${{ github.event.inputs.version_suffix }}"
-          VERSION="${YEAR}.${MONTH}.${DAY}-${SUFFIX}"
-        fi
-        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=v${VERSION}" >> $GITHUB_OUTPUT
-    
-    - name: Publish prerelease to NuGet.org
-      run: |
-        dotnet nuget push ./artifacts/*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-    
-    - name: Create GitHub Prerelease
-      uses: softprops/action-gh-release@v3
-      with:
-        files: ./artifacts/*.nupkg
-        generate_release_notes: true
-        name: Prerelease v${{ steps.get_version.outputs.VERSION }}
-        prerelease: true
-        tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
