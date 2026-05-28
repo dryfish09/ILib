@@ -1,3 +1,4 @@
+Không đổi action version, cập nhật để config prerelease/latest qua tick trong checkbox khi chạy thủ công
 name: Build, Test, and Publish DryFish.ILib
 
 on:
@@ -7,39 +8,6 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      release_type:
-        description: 'Release type'
-        required: true
-        default: 'prerelease'
-        type: choice
-        options:
-          - prerelease
-          - latest
-      version_suffix:
-        description: 'Version suffix (e.g., beta1, rc1) - only for prerelease'
-        required: false
-        default: 'beta1'
-        type: string
-      skip_tests:
-        description: 'Skip tests'
-        required: false
-        default: false
-        type: boolean
-      create_tag:
-        description: 'Create git tag for this version'
-        required: false
-        default: true
-        type: boolean
-      tag_message:
-        description: 'Tag message (optional)'
-        required: false
-        type: string
-      publish_to_nuget:
-        description: 'Publish to NuGet.org'
-        required: false
-        default: true
-        type: boolean
 
 env:
   DOTNET_VERSION: '8.0.x'
@@ -62,13 +30,16 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Setup .NET Framework (Windows only)
+      if: runner.os == 'Windows'
+      run: |
+        echo "Using .NET Framework 4.8"
     
     - name: Restore dependencies
       run: dotnet restore src/main/DryFish.ILib.csproj
@@ -77,146 +48,26 @@ jobs:
       run: dotnet build src/main/DryFish.ILib.csproj --configuration Release --framework ${{ matrix.framework }} --no-restore
     
     - name: Test
-      if: github.event.inputs.skip_tests != 'true' && (matrix.framework != 'net48' || runner.os == 'Windows')
+      if: matrix.framework != 'net48' || runner.os == 'Windows'
       run: dotnet test src/test/DryFish.ILib.Test.csproj --configuration Release --framework ${{ matrix.framework }} --no-build --verbosity normal
-
-  create-tag:
-    name: Create Git Tag
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.create_tag == 'true'
-    outputs:
-      tag_name: ${{ steps.create_tag.outputs.tag_name }}
-      version: ${{ steps.get_version.outputs.VERSION }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Get version
-      id: get_version
-      run: |
-        YEAR=$(date +'%Y')
-        MONTH=$(date +'%-m')
-        DAY=$(date +'%-d')
-        
-        if [ "${{ github.event.inputs.release_type }}" == "latest" ]; then
-          VERSION="${YEAR}.${MONTH}.${DAY}"
-        else
-          SUFFIX="${{ github.event.inputs.version_suffix }}"
-          VERSION="${YEAR}.${MONTH}.${DAY}-${SUFFIX}"
-        fi
-        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=v${VERSION}" >> $GITHUB_OUTPUT
-    
-    - name: Check if tag exists
-      id: check_tag
-      run: |
-        TAG_NAME="v${{ steps.get_version.outputs.VERSION }}"
-        if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-          echo "TAG_EXISTS=true" >> $GITHUB_OUTPUT
-          echo "Tag $TAG_NAME already exists"
-        else
-          echo "TAG_EXISTS=false" >> $GITHUB_OUTPUT
-          echo "Tag $TAG_NAME does not exist"
-        fi
-    
-    - name: Configure git
-      if: steps.check_tag.outputs.TAG_EXISTS == 'false'
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-    
-    - name: Create tag
-      if: steps.check_tag.outputs.TAG_EXISTS == 'false'
-      id: create_tag
-      run: |
-        TAG_NAME="${{ steps.get_version.outputs.TAG_NAME }}"
-        TAG_MSG="${{ github.event.inputs.tag_message }}"
-        
-        if [ -z "$TAG_MSG" ]; then
-          TAG_MSG="Release $TAG_NAME"
-          if [ "${{ github.event.inputs.release_type }}" == "prerelease" ]; then
-            TAG_MSG="$TAG_MSG (prerelease)"
-          fi
-        fi
-        
-        git tag -a "$TAG_NAME" -m "$TAG_MSG"
-        git push origin "$TAG_NAME"
-        echo "Created and pushed tag: $TAG_NAME"
-        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-    
-    - name: Tag already exists warning
-      if: steps.check_tag.outputs.TAG_EXISTS == 'true'
-      run: |
-        echo "::warning::Tag ${{ steps.get_version.outputs.TAG_NAME }} already exists. Skipping tag creation."
 
   pack:
     name: Pack NuGet
-    needs: [build-and-test, create-tag]
+    needs: build-and-test
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'push' || 
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push'
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
-    - name: Get version
-      id: get_version
-      run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          if [ -n "${{ needs.create-tag.outputs.version }}" ]; then
-            VERSION="${{ needs.create-tag.outputs.version }}"
-          else
-            YEAR=$(date +'%Y')
-            MONTH=$(date +'%-m')
-            DAY=$(date +'%-d')
-            if [ "${{ github.event.inputs.release_type }}" == "latest" ]; then
-              VERSION="${YEAR}.${MONTH}.${DAY}"
-            else
-              SUFFIX="${{ github.event.inputs.version_suffix }}"
-              VERSION="${YEAR}.${MONTH}.${DAY}-${SUFFIX}"
-            fi
-          fi
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "IS_PRERELEASE=${{ github.event.inputs.release_type == 'prerelease' }}" >> $GITHUB_OUTPUT
-        else
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
-          else
-            YEAR=$(date +'%Y')
-            MONTH=$(date +'%-m')
-            DAY=$(date +'%-d')
-            VERSION="${YEAR}.${MONTH}.${DAY}-preview"
-            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
-          fi
-        fi
-    
     - name: Pack NuGet package
-      run: |
-        dotnet pack src/main/DryFish.ILib.csproj \
-          --configuration Release \
-          -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
-          -p:IncludeSymbols=true \
-          -p:SymbolPackageFormat=snupkg \
-          --output ./artifacts
+      run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release --output ./artifacts --include-symbols
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v7
@@ -226,24 +77,13 @@ jobs:
           ./artifacts/*.nupkg
           ./artifacts/*.snupkg
 
-  publish-to-nuget:
+  publish:
     name: Publish to NuGet
     needs: pack
     runs-on: ubuntu-latest
-    # Use always() to ensure this job runs regardless of previous job status
-    # But add condition to actually publish only when needed
-    if: always()
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     
     steps:
-    - name: Debug info
-      run: |
-        echo "=== DEBUG INFO ==="
-        echo "Event name: ${{ github.event_name }}"
-        echo "Release type: ${{ github.event.inputs.release_type }}"
-        echo "Publish to NuGet: ${{ github.event.inputs.publish_to_nuget }}"
-        echo "GitHub ref: ${{ github.ref }}"
-        echo "=================="
-    
     - name: Checkout code
       uses: actions/checkout@v6
     
@@ -258,99 +98,30 @@ jobs:
         name: nuget-packages
         path: ./artifacts
     
-    - name: List artifacts
-      run: ls -la ./artifacts/
-    
-    - name: Get version info
+    - name: Get version from tag
       id: get_version
-      run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          if [ -n "${{ needs.create-tag.outputs.version }}" ]; then
-            VERSION="${{ needs.create-tag.outputs.version }}"
-          else
-            YEAR=$(date +'%Y')
-            MONTH=$(date +'%-m')
-            DAY=$(date +'%-d')
-            if [ "${{ github.event.inputs.release_type }}" == "latest" ]; then
-              VERSION="${YEAR}.${MONTH}.${DAY}"
-            else
-              SUFFIX="${{ github.event.inputs.version_suffix }}"
-              VERSION="${YEAR}.${MONTH}.${DAY}-${SUFFIX}"
-            fi
-          fi
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "IS_PRERELEASE=${{ github.event.inputs.release_type == 'prerelease' }}" >> $GITHUB_OUTPUT
-        else
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
-          else
-            # Skip publish for branch pushes (not tags)
-            echo "SKIP_PUBLISH=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-        fi
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
     
-    - name: Check if should publish
-      id: should_publish
+    - name: Pack with version
       run: |
-        SHOULD_PUBLISH="false"
-        
-        # For tag pushes - always publish
-        if [[ "${{ github.event_name }}" == "push" && "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]]; then
-          SHOULD_PUBLISH="true"
-          echo "Publishing because: tag push"
-        fi
-        
-        # For workflow dispatch with publish_to_nuget=true
-        if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.publish_to_nuget }}" == "true" ]]; then
-          SHOULD_PUBLISH="true"
-          echo "Publishing because: workflow_dispatch with publish_to_nuget=true"
-        fi
-        
-        echo "SHOULD_PUBLISH=${SHOULD_PUBLISH}" >> $GITHUB_OUTPUT
-        
-        if [ "${SHOULD_PUBLISH}" == "false" ]; then
-          echo "::warning::Skipping publish to NuGet.org"
-        fi
+        dotnet pack src/main/DryFish.ILib.csproj \
+          --configuration Release \
+          -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
+          --output ./artifacts \
+          --include-symbols
     
     - name: Publish to NuGet.org
-      if: steps.should_publish.outputs.SHOULD_PUBLISH == 'true'
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
       run: |
-        if [ -n "$NUGET_API_KEY" ]; then
-          echo "Publishing to NuGet.org..."
-          dotnet nuget push ./artifacts/*.nupkg \
-            --api-key $NUGET_API_KEY \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
-          echo "Published successfully!"
-        else
-          echo "::error::NUGET_API_KEY not set. Cannot publish to NuGet.org"
-          exit 1
-        fi
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
     
     - name: Create GitHub Release
-      if: steps.should_publish.outputs.SHOULD_PUBLISH == 'true'
       uses: softprops/action-gh-release@v3
       with:
         files: ./artifacts/*.nupkg
         generate_release_notes: true
-        name: ${{ steps.get_version.outputs.IS_PRERELEASE == 'true' && 'Prerelease' || 'Release' }} v${{ steps.get_version.outputs.VERSION }}
-        prerelease: ${{ steps.get_version.outputs.IS_PRERELEASE == 'true' }}
-        tag_name: v${{ steps.get_version.outputs.VERSION }}
+        name: Release v${{ steps.get_version.outputs.VERSION }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Publish summary
-      if: always()
-      run: |
-        echo "## 📦 Publish Summary" >> $GITHUB_STEP_SUMMARY
-        echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-        echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Event | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Version | ${{ steps.get_version.outputs.VERSION }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Prerelease | ${{ steps.get_version.outputs.IS_PRERELEASE }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Published | ${{ steps.should_publish.outputs.SHOULD_PUBLISH }} |" >> $GITHUB_STEP_SUMMARY
