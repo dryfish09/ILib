@@ -7,6 +7,25 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'prerelease'
+        type: choice
+        options:
+          - prerelease
+          - latest
+      version_suffix:
+        description: 'Version suffix (e.g., beta1, rc1) - only for prerelease'
+        required: false
+        default: 'beta1'
+        type: string
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        default: false
+        type: boolean
 
 env:
   DOTNET_VERSION: '8.0.x'
@@ -35,11 +54,6 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
-    - name: Setup .NET Framework (Windows only)
-      if: runner.os == 'Windows'
-      run: |
-        echo "Using .NET Framework 4.8"
-    
     - name: Restore dependencies
       run: dotnet restore src/main/DryFish.ILib.csproj
     
@@ -47,14 +61,16 @@ jobs:
       run: dotnet build src/main/DryFish.ILib.csproj --configuration Release --framework ${{ matrix.framework }} --no-restore
     
     - name: Test
-      if: matrix.framework != 'net48' || runner.os == 'Windows'
+      if: github.event.inputs.skip_tests != 'true' && (matrix.framework != 'net48' || runner.os == 'Windows')
       run: dotnet test src/test/DryFish.ILib.Test.csproj --configuration Release --framework ${{ matrix.framework }} --no-build --verbosity normal
 
   pack:
     name: Pack NuGet
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: |
+      github.event_name == 'push' || 
+      github.event_name == 'workflow_dispatch'
     
     steps:
     - name: Checkout code
@@ -65,8 +81,57 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          # Get current date for version
+          YEAR=$(date +'%Y')
+          MONTH=$(date +'%-m')
+          DAY=$(date +'%-d')
+          
+          if [ "${{ github.event.inputs.release_type }}" == "latest" ]; then
+            VERSION="${YEAR}.${MONTH}.${DAY}"
+          else
+            SUFFIX="${{ github.event.inputs.version_suffix }}"
+            VERSION="${YEAR}.${MONTH}.${DAY}-${SUFFIX}"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "IS_PRERELEASE=${{ github.event.inputs.release_type == 'prerelease' }}" >> $GITHUB_OUTPUT
+        else
+          # For tag push, use tag version
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          else
+            # For branch push, use date-based prerelease
+            YEAR=$(date +'%Y')
+            MONTH=$(date +'%-m')
+            DAY=$(date +'%-d')
+            VERSION="${YEAR}.${MONTH}.${DAY}-preview"
+            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          fi
+        fi
+    
     - name: Pack NuGet package
-      run: dotnet pack src/main/DryFish.ILib.csproj --configuration Release --output ./artifacts --include-symbols
+      run: |
+        if [ "${{ steps.get_version.outputs.IS_PRERELEASE }}" == "true" ]; then
+          dotnet pack src/main/DryFish.ILib.csproj \
+            --configuration Release \
+            -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
+            -p:IncludeSymbols=true \
+            -p:SymbolPackageFormat=snupkg \
+            --output ./artifacts
+        else
+          dotnet pack src/main/DryFish.ILib.csproj \
+            --configuration Release \
+            -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
+            -p:IncludeSymbols=true \
+            -p:SymbolPackageFormat=snupkg \
+            --output ./artifacts
+        fi
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v7
@@ -80,7 +145,9 @@ jobs:
     name: Publish to NuGet
     needs: pack
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_type == 'latest')
     
     steps:
     - name: Checkout code
@@ -97,19 +164,40 @@ jobs:
         name: nuget-packages
         path: ./artifacts
     
-    - name: Get version from tag
+    - name: Get version info
       id: get_version
-      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          YEAR=$(date +'%Y')
+          MONTH=$(date +'%-m')
+          DAY=$(date +'%-d')
+          VERSION="${YEAR}.${MONTH}.${DAY}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+        else
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+        fi
     
     - name: Pack with version
       run: |
         dotnet pack src/main/DryFish.ILib.csproj \
           --configuration Release \
           -p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
-          --output ./artifacts \
-          --include-symbols
+          -p:IncludeSymbols=true \
+          -p:SymbolPackageFormat=snupkg \
+          --output ./artifacts
     
     - name: Publish to NuGet.org
+      run: |
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+    
+    - name: Publish prerelease to NuGet.org
+      if: steps.get_version.outputs.IS_PRERELEASE == 'true'
       run: |
         dotnet nuget push ./artifacts/*.nupkg \
           --api-key ${{ secrets.NUGET_API_KEY }} \
@@ -122,5 +210,57 @@ jobs:
         files: ./artifacts/*.nupkg
         generate_release_notes: true
         name: Release v${{ steps.get_version.outputs.VERSION }}
+        prerelease: ${{ steps.get_version.outputs.IS_PRERELEASE == 'true' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-prerelease:
+    name: Publish Prerelease to NuGet
+    needs: pack
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && 
+      github.event.inputs.release_type == 'prerelease'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Download artifacts
+      uses: actions/download-artifact@v8
+      with:
+        name: nuget-packages
+        path: ./artifacts
+    
+    - name: Get version info
+      id: get_version
+      run: |
+        YEAR=$(date +'%Y')
+        MONTH=$(date +'%-m')
+        DAY=$(date +'%-d')
+        SUFFIX="${{ github.event.inputs.version_suffix }}"
+        VERSION="${YEAR}.${MONTH}.${DAY}-${SUFFIX}"
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Publish prerelease to NuGet.org
+      run: |
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+    
+    - name: Create GitHub Prerelease
+      uses: softprops/action-gh-release@v3
+      with:
+        files: ./artifacts/*.nupkg
+        generate_release_notes: true
+        name: Prerelease v${{ steps.get_version.outputs.VERSION }}
+        prerelease: true
+        tag_name: v${{ steps.get_version.outputs.VERSION }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
