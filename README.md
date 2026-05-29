@@ -11,14 +11,12 @@ A simple, lightweight C# library for console operations, logging, delays, and ap
 ## ✨ Features
 
 - 📝 **Multiple Log Levels** - Notice, Warning, Info, Error, Debug, Complete
-- 🎨 **Colored Console** - Set colors by name (red, green, blue, etc.)
+- 🎨 **Colored Console** - Set foreground and background colors by name
 - ⏱️ **Delays** - Both synchronous and asynchronous delay methods
 - ⌨️ **User Input** - ReadLine and ReadKey with null safety
 - 🧹 **Console Control** - Clear console screen with exception handling
 - 🌍 **Timezone Support** - Cross-platform timezone conversion (IANA & Windows)
-- 🛡️ **Error Handling** - Graceful exception handling with optional exit
 - 🔧 **Configurable** - Toggle timestamps, custom formats, debug mode
-- 🔒 **Security** - Automatic sensitive data masking in logs
 - 📦 **Lightweight** - Zero external dependencies
 - 🚪 **Exit** - Controlled application exit with status codes
 
@@ -36,7 +34,7 @@ NuGet\Install-Package DryFish.ILib
 
 ### PackageReference
 ```xml
-<PackageReference Include="DryFish.ILib" Version="2026.8.0-beta1" />
+<PackageReference Include="DryFish.ILib" Version="2026.8.0" />
 ```
 
 ## 🚀 Quick Start
@@ -113,7 +111,9 @@ ILib.ILogInfo($"Vietnam time: {vnTime}");
 |--------|-------------|---------|
 | `ISetConsoleColor(string color)` | Set foreground color | `ILib.ISetConsoleColor("red");` |
 | `ISetConsoleColor(string fg, string bg)` | Set both colors | `ILib.ISetConsoleColor("yellow", "blue");` |
-| `IResetConsoleColor()` | Reset to default | `ILib.IResetConsoleColor();` |
+| `ISetBgColor(string color)` | Set background color only | `ILib.ISetBgColor("blue");` |
+| `IResetConsoleColor()` | Reset both foreground and background | `ILib.IResetConsoleColor();` |
+| `IResetBgColor()` | Reset background color only | `ILib.IResetBgColor();` |
 
 **Supported colors:** 
 `black`, `darkblue`, `darkgreen`, `darkcyan`, `darkred`, `darkmagenta`, `darkyellow`, `gray`, `grey`, `darkgray`, `darkgrey`, `blue`, `green`, `cyan`, `red`, `magenta`, `yellow`, `white`
@@ -128,15 +128,6 @@ ILib.ILogInfo($"Vietnam time: {vnTime}");
 | `IGetTimeZone(string id, string format)` | With custom format | `ILib.IGetTimeZone("America/New_York", "dd/MM/yyyy");` |
 
 **Timezone offset formats:** `"+7"`, `"-5"`, `"+730"`, `"+7:30"`, `"+0530"`
-
-### Error Handling Methods
-
-| Method | Description | Example |
-|--------|-------------|---------|
-| `IHandleError(Exception ex)` | Handle exception | `ILib.IHandleError(ex);` |
-| `IHandleError(Exception ex, int exitCode)` | Handle and exit | `ILib.IHandleError(ex, 1);` |
-| `IHandleError(string message)` | Handle error message | `ILib.IHandleError("Failed!");` |
-| `IHandleError(string message, int exitCode)` | Handle and exit | `ILib.IHandleError("Failed!", 1);` |
 
 ### Configuration
 
@@ -172,28 +163,23 @@ ILib.ILogColor("magenta", "AUTH", "User logged in");
 ILib.ILogColor("blue", "DB", "Connected to database");
 ```
 
-### Direct Console Output
-```csharp
-// Write without newline
-ILib.IWrite("Enter your age: ");
-string age = ILib.IReadLine();
-
-// Write line
-ILib.IWriteLine($"You entered: {age}");
-```
-
 ### Console Colors
 ```csharp
-// By name
+// Set only foreground
 ILib.ISetConsoleColor("cyan");
 ILib.INotice("Cyan text");
 
-// Foreground and background
-ILib.ISetConsoleColor("yellow", "blue");
-ILib.INotice("Yellow on blue");
+// Set only background
+ILib.ISetBgColor("blue");
+ILib.INotice("Text on blue background");
 
-// Reset to default
-ILib.IResetConsoleColor();
+// Set both foreground and background
+ILib.ISetConsoleColor("yellow", "blue");
+ILib.INotice("Yellow text on blue background");
+
+// Reset colors
+ILib.IResetBgColor();      // Reset only background
+ILib.IResetConsoleColor(); // Reset both
 ```
 
 ### Clear Console
@@ -216,6 +202,16 @@ if (key?.Key == ConsoleKey.Y)
 }
 ```
 
+### Direct Console Output
+```csharp
+// Write without newline
+ILib.IWrite("Enter your age: ");
+string age = ILib.IReadLine();
+
+// Write line
+ILib.IWriteLine($"You entered: {age}");
+```
+
 ### Timezone Examples
 ```csharp
 // Using UTC offset
@@ -232,31 +228,6 @@ string uk = ILib.IGetTimeZone("Europe/London");
 string time = ILib.IGetTimeZone("Asia/Ho_Chi_Minh", "HH:mm dd/MM/yyyy");
 ```
 
-### Error Handling
-```csharp
-try
-{
-    int.Parse("not a number");
-}
-catch (Exception ex)
-{
-    ILib.IHandleError(ex);
-}
-
-// With automatic exit
-try
-{
-    // Critical operation
-}
-catch (Exception ex)
-{
-    ILib.IHandleError(ex, 1); // Logs error and exits with code 1
-}
-
-// Handle null exception safely
-ILib.IHandleError(null as Exception); // Handles gracefully
-```
-
 ### Configuration
 ```csharp
 // Disable timestamps
@@ -267,9 +238,9 @@ ILib.ILogInfo("No timestamp"); // Output: [INFO] - No timestamp
 ILib.TimestampFormat = "HH:mm:ss";
 ILib.ILogInfo("With time only"); // Output: [INFO] 14:30:45 - With time only
 
-// Enable debug mode (with security masking)
+// Enable debug mode
 ILib.ISetDebug(true);
-ILib.ILogDebug("This will show with masked sensitive data");
+ILib.ILogDebug("This will show");
 ```
 
 ### Async Delay
@@ -290,33 +261,6 @@ for (int i = 0; i <= 100; i += 20)
     ILib.IDelay(500);
 }
 ILib.ILogComplete("Complete!");
-```
-
-## 🔒 Security Features
-
-ILib automatically masks sensitive information in logs and error messages:
-
-- ✅ Passwords and tokens (`password=***`, `token=***`)
-- ✅ Connection strings
-- ✅ Email addresses
-- ✅ IP addresses
-- ✅ Credit card numbers
-- ✅ File paths with usernames
-
-### Example:
-```csharp
-// Sensitive data is automatically masked
-ILib.ILogError("Failed with password=MySecret123");
-// Output: [ERROR] - Failed with password=[MASKED]
-
-// Stack traces are masked in debug mode
-ILib.ISetDebug(true);
-try {
-    throw new Exception("Error");
-} catch (Exception ex) {
-    ILib.IHandleError(ex);
-    // Stack trace shows [MASKED_PATH] instead of real paths
-}
 ```
 
 ## 🧪 Running Tests
@@ -380,20 +324,18 @@ ILib/
 ## 🗺️ Roadmap
 
 - [x] Basic logging (Notice, Warn, Info, Error, Complete)
-- [x] Colored console output
+- [x] Colored console output (foreground & background)
 - [x] Sync/Async delays
 - [x] User input methods
 - [x] Direct console output (IWrite, IWriteLine)
 - [x] Clear console screen
 - [x] Cross-platform timezone
-- [x] Error handling with exit codes
 - [x] Debug mode
 - [x] Configurable timestamps
-- [x] Security masking for sensitive data
 - [x] Colored logging (ILogColor)
-- [ ] File logging (planned)
-- [ ] JSON log formatting (planned)
-- [ ] Log rotation (planned)
+- [x] Background color control (ISetBgColor, IResetBgColor)
+
+*ILib will no longer be updated, because it has completed what it was supposed to do*
 
 ## 🤝 Contributing
 
@@ -425,7 +367,6 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 - CI/CD with GitHub Actions
 - Cross-platform timezone support
 - Dependabot for automated dependency updates
-- Security masking inspired by OWASP guidelines
 
 ## 📞 Support
 
