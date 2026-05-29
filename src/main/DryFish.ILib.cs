@@ -405,6 +405,66 @@ public static class ILib
     }
 
     /// <summary>
+    /// Sets the console background color using a color name.
+    /// </summary>
+    /// <param name="color">Color name (black, darkblue, darkgreen, darkcyan, darkred, darkmagenta, darkyellow, gray, darkgray, blue, green, cyan, red, magenta, yellow, white).</param>
+    /// <example>
+    /// <code>
+    /// ILib.ISetBgColor("blue");
+    /// ILib.INotice("This text has blue background");
+    /// ILib.IResetBgColor();
+    /// </code>
+    /// </example>
+    public static void ISetBgColor(string color)
+    {
+        lock (_consoleLock)
+        {
+            if (!_colorsSaved)
+            {
+                _originalForegroundColor = Console.ForegroundColor;
+                _originalBackgroundColor = Console.BackgroundColor;
+                _colorsSaved = true;
+            }
+
+            var consoleColor = ParseColor(color);
+            if (consoleColor.HasValue)
+            {
+                Console.BackgroundColor = consoleColor.Value;
+            }
+            else
+            {
+                IWarn($"Unknown background color: {color}. Using default.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resets the console background color to its original/default value.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// ILib.ISetBgColor("blue");
+    /// ILib.INotice("Blue background");
+    /// ILib.IResetBgColor();
+    /// ILib.INotice("Default background");
+    /// </code>
+    /// </example>
+    public static void IResetBgColor()
+    {
+        lock (_consoleLock)
+        {
+            if (_colorsSaved)
+            {
+                Console.BackgroundColor = _originalBackgroundColor;
+            }
+            else
+            {
+                Console.ResetColor();
+            }
+        }
+    }
+
+    /// <summary>
     /// Resets console colors to their original/default values.
     /// </summary>
     public static void IResetConsoleColor()
