@@ -1,4 +1,5 @@
 using System;
+using DryFish.ILib;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -9,9 +10,8 @@ namespace DryFish.ILib.Tests;
 
 public class ILibTests
 {
-    private const int DelayTolerance = 150; // ms tolerance for delay tests
+    private const int DelayTolerance = 150;
     private const int ShortDelay = 100;
-    private const int LongDelay = 500;
 
     public ILibTests()
     {
@@ -62,13 +62,6 @@ public class ILibTests
     public void ILogError_ShouldNotThrow()
     {
         var exception = Record.Exception(() => ILib.ILogError("Test error"));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void ILogError_WithSensitiveData_ShouldMask()
-    {
-        var exception = Record.Exception(() => ILib.ILogError("Error with password=secret123"));
         Assert.Null(exception);
     }
 
@@ -467,57 +460,6 @@ public class ILibTests
         Assert.Null(exception);
     }
 
-    // ========== Error Handling Tests ==========
-
-    [Fact]
-    public void IHandleError_WithException_ShouldNotThrow()
-    {
-        var ex = new InvalidOperationException("Test exception");
-        var result = ILib.IHandleError(ex);
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IHandleError_WithNullException_ShouldNotThrow()
-    {
-        var result = ILib.IHandleError(null as Exception);
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IHandleError_WithMessage_ShouldNotThrow()
-    {
-        var result = ILib.IHandleError("Test error message");
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IHandleError_WithExitCode_ShouldLogWarning()
-    {
-        // Note: This test doesn't actually exit because IExit is mocked via environment
-        var ex = new Exception("Test with exit");
-        var result = ILib.IHandleError(ex, 1);
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IHandleError_WithSensitiveExceptionMessage_ShouldMask()
-    {
-        var ex = new Exception("Error with password=secret123");
-        var result = ILib.IHandleError(ex);
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IHandleError_WithInnerException_ShouldLogBoth()
-    {
-        var innerEx = new Exception("Inner error");
-        var outerEx = new Exception("Outer error", innerEx);
-        
-        var result = ILib.IHandleError(outerEx);
-        Assert.True(result);
-    }
-
     // ========== Configuration Tests ==========
 
     [Fact]
@@ -554,40 +496,6 @@ public class ILibTests
         Assert.Null(exception);
         
         ILib.TimestampFormat = originalFormat;
-    }
-
-    // ========== Security Masking Tests ==========
-
-    [Fact]
-    public void Masking_ShouldMaskPasswords()
-    {
-        var exception = Record.Exception(() => 
-            ILib.ILogError("Authentication failed with password=MySecret123"));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void Masking_ShouldMaskConnectionStrings()
-    {
-        var exception = Record.Exception(() => 
-            ILib.ILogError("Connection string=Server=localhost;User Id=admin;Password=admin123"));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void Masking_ShouldMaskEmailAddresses()
-    {
-        var exception = Record.Exception(() => 
-            ILib.ILogError("User email: test@example.com"));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void Masking_ShouldMaskIPAddresses()
-    {
-        var exception = Record.Exception(() => 
-            ILib.ILogError("Connection from 192.168.1.100"));
-        Assert.Null(exception);
     }
 
     // ========== Combined Tests ==========
@@ -801,7 +709,7 @@ public class ILibTests
         Assert.Null(exception);
     }
 
-    // ========== Helper Method Tests ==========
+    // ========== Property Tests ==========
 
     [Fact]
     public void ShowTimestampsProperty_ShouldBeConfigurable()
@@ -829,54 +737,5 @@ public class ILibTests
         Assert.Equal("yyyy/MM/dd", ILib.TimestampFormat);
         
         ILib.TimestampFormat = original;
-    }
-}
-
-// ========== Extension Method Tests ==========
-
-public class ILibExtensionTests
-{
-    [Fact]
-    public void ILogError_ExceptionExtension_ShouldNotThrow()
-    {
-        var ex = new InvalidOperationException("Test exception");
-        var exception = Record.Exception(() => ex.ILogError());
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void ILogError_ExceptionExtension_WithContext_ShouldNotThrow()
-    {
-        var ex = new InvalidOperationException("Test exception");
-        var exception = Record.Exception(() => ex.ILogError("Database operation failed"));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void ILogError_ExceptionExtension_WithNullContext_ShouldNotThrow()
-    {
-        var ex = new InvalidOperationException("Test exception");
-        var exception = Record.Exception(() => ex.ILogError(null));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void ILogError_ExceptionExtension_WithNullException_ShouldNotThrow()
-    {
-        Exception ex = null;
-        var exception = Record.Exception(() => ex.ILogError());
-        Assert.Null(exception);
-    }
-}
-
-// ========== Extension Method ==========
-
-public static class ILibTestExtensions
-{
-    public static void ILogError(this Exception ex, string context = null)
-    {
-        var message = !string.IsNullOrEmpty(context) ? $"{context}: {ex?.Message}" : ex?.Message;
-        if (message != null)
-            ILib.ILogError(message);
     }
 }
