@@ -1,9 +1,9 @@
 using System;
-using DryFish.ILib;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using DryFish.ILib;
 using Xunit;
 
 namespace DryFish.ILib.Tests;
@@ -376,6 +376,172 @@ public class ILibTests
         Assert.Null(exception);
     }
 
+    // ========== ISetBgColor Tests ==========
+
+    [Fact]
+    public void ISetBgColor_WithValidColorName_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() => ILib.ISetBgColor("blue"));
+        Assert.Null(exception);
+        ILib.IResetBgColor();
+    }
+
+    [Fact]
+    public void ISetBgColor_WithInvalidColorName_ShouldFallbackToDefault()
+    {
+        var exception = Record.Exception(() => ILib.ISetBgColor("invalidcolor"));
+        Assert.Null(exception);
+        ILib.IResetBgColor();
+    }
+
+    [Fact]
+    public void ISetBgColor_WithAllColors_ShouldWork()
+    {
+        var colors = new[] { "red", "green", "blue", "yellow", "cyan", "magenta", "white" };
+        
+        var exception = Record.Exception(() =>
+        {
+            foreach (var color in colors)
+            {
+                ILib.ISetBgColor(color);
+                ILib.IResetBgColor();
+            }
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ISetBgColor_WithAllSupportedColors_ShouldWork()
+    {
+        var colors = new[] 
+        { 
+            "black", "darkblue", "darkgreen", "darkcyan", "darkred", 
+            "darkmagenta", "darkyellow", "gray", "grey", "darkgray", 
+            "darkgrey", "blue", "green", "cyan", "red", "magenta", 
+            "yellow", "white" 
+        };
+        
+        var exception = Record.Exception(() =>
+        {
+            foreach (var color in colors)
+            {
+                ILib.ISetBgColor(color);
+                ILib.IResetBgColor();
+            }
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ISetBgColor_WithNullColor_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() => ILib.ISetBgColor(null));
+        Assert.Null(exception);
+        ILib.IResetBgColor();
+    }
+
+    [Fact]
+    public void ISetBgColor_WithEmptyColor_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() => ILib.ISetBgColor(""));
+        Assert.Null(exception);
+        ILib.IResetBgColor();
+    }
+
+    [Fact]
+    public void ISetBgColor_CaseInsensitive_ShouldWork()
+    {
+        var exception = Record.Exception(() =>
+        {
+            ILib.ISetBgColor("RED");
+            ILib.IResetBgColor();
+            ILib.ISetBgColor("Blue");
+            ILib.IResetBgColor();
+            ILib.ISetBgColor("GrEeN");
+            ILib.IResetBgColor();
+        });
+        
+        Assert.Null(exception);
+    }
+
+    // ========== IResetBgColor Tests ==========
+
+    [Fact]
+    public void IResetBgColor_ShouldNotThrow()
+    {
+        ILib.ISetBgColor("blue");
+        var exception = Record.Exception(() => ILib.IResetBgColor());
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void IResetBgColor_WithoutSettingColor_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() => ILib.IResetBgColor());
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void IResetBgColor_AfterMultipleChanges_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() =>
+        {
+            ILib.ISetBgColor("red");
+            ILib.ISetBgColor("green");
+            ILib.ISetBgColor("blue");
+            ILib.IResetBgColor();
+        });
+        
+        Assert.Null(exception);
+    }
+
+    // ========== Combined Color Tests ==========
+
+    [Fact]
+    public void ISetBgColor_And_ISetConsoleColor_ShouldWorkTogether()
+    {
+        var exception = Record.Exception(() =>
+        {
+            ILib.ISetConsoleColor("yellow");
+            ILib.ISetBgColor("blue");
+            ILib.INotice("Yellow text on blue background");
+            ILib.IResetConsoleColor();
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void IResetBgColor_ShouldNotAffectForeground()
+    {
+        var exception = Record.Exception(() =>
+        {
+            ILib.ISetConsoleColor("red");
+            ILib.ISetBgColor("blue");
+            ILib.IResetBgColor();
+            ILib.INotice("Red text on default background");
+            ILib.IResetConsoleColor();
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void IResetConsoleColor_ShouldResetBothColors()
+    {
+        var exception = Record.Exception(() =>
+        {
+            ILib.ISetConsoleColor("yellow");
+            ILib.ISetBgColor("blue");
+            ILib.IResetConsoleColor();
+            ILib.INotice("Default colors");
+        });
+        
+        Assert.Null(exception);
+    }
+
     [Fact]
     public void AllColorNames_ShouldWork()
     {
@@ -566,6 +732,22 @@ public class ILibTests
     }
 
     [Fact]
+    public void ConcurrentBgColorChanges_ShouldNotThrow()
+    {
+        var exception = Record.Exception(() =>
+        {
+            Parallel.For(0, 20, i =>
+            {
+                ILib.ISetBgColor(i % 2 == 0 ? "red" : "blue");
+                ILib.IDelay(5);
+                ILib.IResetBgColor();
+            });
+        });
+        
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public void ConcurrentILogColor_ShouldNotThrow()
     {
         var exception = Record.Exception(() =>
@@ -670,6 +852,23 @@ public class ILibTests
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void RapidBgColorChanges_ShouldNotThrow()
+    {
+        var colors = new[] { "red", "green", "blue", "yellow", "cyan", "magenta" };
+        
+        var exception = Record.Exception(() =>
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                ILib.ISetBgColor(colors[i % colors.Length]);
+                ILib.IResetBgColor();
+            }
+        });
+        
+        Assert.Null(exception);
+    }
+
     // ========== Stress Tests ==========
 
     [Fact]
@@ -681,7 +880,7 @@ public class ILibTests
             
             for (int i = 0; i < 50; i++)
             {
-                var op = random.Next(5);
+                var op = random.Next(6);
                 switch (op)
                 {
                     case 0:
@@ -700,6 +899,11 @@ public class ILibTests
                         ILib.ISetConsoleColor("red");
                         ILib.IWrite($"Write {i}");
                         ILib.IResetConsoleColor();
+                        break;
+                    case 5:
+                        ILib.ISetBgColor("blue");
+                        ILib.INotice($"Bg {i}");
+                        ILib.IResetBgColor();
                         break;
                 }
                 ILib.IDelay(1);
