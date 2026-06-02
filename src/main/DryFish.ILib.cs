@@ -32,7 +32,7 @@ public static class ILib
     {
         lock (_consoleLock)
         {
-            Console.WriteLine($"[NOTICE] {message}");
+            Console.WriteLine($"[NOTICE]: {message}");
         }
     }
 
@@ -46,7 +46,7 @@ public static class ILib
         {
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"[WARN] {message}");
+            Console.WriteLine($"[WARN]: {message}");
             Console.ForegroundColor = originalColor;
         }
     }
@@ -63,7 +63,7 @@ public static class ILib
             Console.ForegroundColor = ConsoleColor.Green;
             var timestamp = GetTimestamp();
             var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[INFO]{timestampPart} - {message}");
+            Console.WriteLine($"[INFO {timestampPart}]: {message}");
             Console.ForegroundColor = originalColor;
         }
     }
@@ -80,7 +80,7 @@ public static class ILib
             Console.ForegroundColor = ConsoleColor.Red;
             var timestamp = GetTimestamp();
             var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.Error.WriteLine($"[ERROR]{timestampPart} - {message}");
+            Console.Error.WriteLine($"[ERROR {timestampPart}]: {message}");
             Console.ForegroundColor = originalColor;
         }
     }
@@ -97,7 +97,7 @@ public static class ILib
             Console.ForegroundColor = ConsoleColor.Green;
             var timestamp = GetTimestamp();
             var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[COMPLETE]{timestampPart} - ✓ {message}");
+            Console.WriteLine($"[COMPLETE {timestampPart}]: ✓ {message}");
             Console.ForegroundColor = originalColor;
         }
     }
@@ -113,7 +113,7 @@ public static class ILib
         {
             var timestamp = GetTimestamp();
             var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[{prefix}]{timestampPart} - {message}");
+            Console.WriteLine($"[{prefix} {timestampPart}]: {message}");
         }
     }
 
@@ -144,7 +144,7 @@ public static class ILib
             
             var timestamp = GetTimestamp();
             var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[{prefix}]{timestampPart} - {message}");
+            Console.WriteLine($"[{prefix} {timestampPart}]: {message}");
             
             Console.ForegroundColor = originalColor;
         }
