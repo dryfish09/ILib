@@ -53,6 +53,7 @@ public static class ILib
 
     /// <summary>
     /// Displays an informational log message with timestamp in green color.
+    /// Format: [INFO 2025-01-15 14:30:25]: message or [INFO]: message when timestamps disabled
     /// </summary>
     /// <param name="message">The info message to display.</param>
     public static void ILogInfo(string message)
@@ -62,14 +63,15 @@ public static class ILib
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Green;
             var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[INFO]{timestampPart} - {message}");
+            var header = string.IsNullOrEmpty(timestamp) ? "[INFO]" : $"[INFO {timestamp}]";
+            Console.WriteLine($"{header}: {message}");
             Console.ForegroundColor = originalColor;
         }
     }
 
     /// <summary>
     /// Displays an error log message in red color.
+    /// Format: [ERROR 2025-01-15 14:30:25]: message or [ERROR]: message when timestamps disabled
     /// </summary>
     /// <param name="message">The error message to display.</param>
     public static void ILogError(string message)
@@ -79,14 +81,15 @@ public static class ILib
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Red;
             var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.Error.WriteLine($"[ERROR]{timestampPart} - {message}");
+            var header = string.IsNullOrEmpty(timestamp) ? "[ERROR]" : $"[ERROR {timestamp}]";
+            Console.Error.WriteLine($"{header}: {message}");
             Console.ForegroundColor = originalColor;
         }
     }
 
     /// <summary>
     /// Displays a completion/success message in green color with a checkmark.
+    /// Format: [COMPLETE 2025-01-15 14:30:25]: ✓ message or [COMPLETE]: ✓ message when timestamps disabled
     /// </summary>
     /// <param name="message">The completion message to display.</param>
     public static void ILogComplete(string message)
@@ -96,14 +99,15 @@ public static class ILib
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Green;
             var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[COMPLETE]{timestampPart} - ✓ {message}");
+            var header = string.IsNullOrEmpty(timestamp) ? "[COMPLETE]" : $"[COMPLETE {timestamp}]";
+            Console.WriteLine($"{header}: ✓ {message}");
             Console.ForegroundColor = originalColor;
         }
     }
 
     /// <summary>
     /// Displays a custom log message with a specified prefix and timestamp.
+    /// Format: [prefix 2025-01-15 14:30:25]: message or [prefix]: message when timestamps disabled
     /// </summary>
     /// <param name="prefix">The custom prefix for the log entry.</param>
     /// <param name="message">The log message to display.</param>
@@ -112,13 +116,14 @@ public static class ILib
         lock (_consoleLock)
         {
             var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[{prefix}]{timestampPart} - {message}");
+            var header = string.IsNullOrEmpty(timestamp) ? $"[{prefix}]" : $"[{prefix} {timestamp}]";
+            Console.WriteLine($"{header}: {message}");
         }
     }
 
     /// <summary>
     /// Displays a colored log message with a specified prefix and timestamp.
+    /// Format: [prefix 2025-01-15 14:30:25]: message or [prefix]: message when timestamps disabled
     /// </summary>
     /// <param name="color">Color name (black, red, green, yellow, blue, magenta, cyan, white, etc.)</param>
     /// <param name="prefix">The custom prefix for the log entry.</param>
@@ -136,15 +141,13 @@ public static class ILib
             }
             else
             {
-                var originalColorTemp = Console.ForegroundColor;
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"[WARN] Unknown color: {color}. Using default color.");
-                Console.ForegroundColor = originalColorTemp;
+                Console.WriteLine($"[WARN]: Unknown color: {color}. Using default color.");
             }
             
             var timestamp = GetTimestamp();
-            var timestampPart = string.IsNullOrEmpty(timestamp) ? "" : $" {timestamp}";
-            Console.WriteLine($"[{prefix}]{timestampPart} - {message}");
+            var header = string.IsNullOrEmpty(timestamp) ? $"[{prefix}]" : $"[{prefix} {timestamp}]";
+            Console.WriteLine($"{header}: {message}");
             
             Console.ForegroundColor = originalColor;
         }
@@ -162,6 +165,7 @@ public static class ILib
 
     /// <summary>
     /// Displays a debug log message in cyan color. Only appears if debug is enabled.
+    /// Format: [DEBUG 14:30:25.123]: message or [DEBUG]: message when timestamps disabled
     /// </summary>
     /// <param name="message">The debug message to display.</param>
     public static void ILogDebug(string message)
@@ -172,7 +176,9 @@ public static class ILib
         {
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine($"[DEBUG] {DateTime.Now:HH:mm:ss.fff} - {message}");
+            var timestamp = ShowTimestamps ? $" {DateTime.Now:HH:mm:ss.fff}" : "";
+            var header = string.IsNullOrEmpty(timestamp) ? "[DEBUG]" : $"[DEBUG{timestamp}]";
+            Console.WriteLine($"{header}: {message}");
             Console.ForegroundColor = originalColor;
         }
     }
