@@ -335,7 +335,6 @@ ILib/
 - [x] Colored logging (ILogColor)
 - [x] Background color control (ISetBgColor, IResetBgColor)
 
-*ILib will no longer be updated, because it has completed what it was supposed to do*
 
 ## 🤝 Contributing
 
